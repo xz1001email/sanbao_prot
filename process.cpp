@@ -803,6 +803,7 @@ int build_adas_warn_frame(int type, char status_flag, AdasWarnFrame *uploadmsg)
     }
 #endif
 
+    mm.warn_type = type;
     switch(type)
     {
         case SB_WARN_TYPE_FCW:
@@ -909,6 +910,7 @@ int build_dms_warn_frame(int type, char status_flag, DsmWarnFrame *uploadmsg)
         goto out;
     }
 #endif
+    mm.warn_type = type;
     switch(type)
     {
         case DMS_FATIGUE_WARN:
