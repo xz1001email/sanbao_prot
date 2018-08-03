@@ -874,6 +874,8 @@ out:
     return (sizeof(*uploadmsg) + uploadmsg->mm_num*sizeof(SBMmHeader));
 }
 
+char *dms_warning_type_to_str(uint8_t type);
+
 /*********************************
 * func: build dms warning package
 * return: framelen
@@ -884,6 +886,8 @@ int build_dms_warn_frame(int type, char status_flag, DsmWarnFrame *uploadmsg)
     InfoForStore mm;
     DmsParaSetting para;
     RealTimeData tmp;
+
+    printf("%s alert happened!\n",dms_warning_type_to_str(type));
 
     read_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
     memset(&mm, 0, sizeof(mm));
@@ -990,9 +994,8 @@ out:
 #if 1
 void deal_wsi_dms_info(WsiFrame *can)
 {
-#if 1
     char status_flag = SB_WARN_STATUS_NONE;
-    DmsAlertInfo msg;
+    DmsAlertInfo *last, *cur;
     uint32_t playloadlen = 0;
     uint8_t msgbuf[512];
     uint8_t txbuf[512];
@@ -1017,13 +1020,12 @@ void deal_wsi_dms_info(WsiFrame *can)
     printf("topic: %s\n", can->topic);
     printbuf(can->warning, sizeof(can->warning));
 #endif
-    //printbuf(can->warning, sizeof(can->warning));
-
-    memcpy(&msg, can->warning, sizeof(can->warning));
 
     for(i=0; i<sizeof(can->warning); i++){
         dms_alert[i] = can->warning[i] & dms_alert_mask[i];
     }
+    cur = (DmsAlertInfo *)dms_alert;
+    last = (DmsAlertInfo *)dms_alert_last;
 
     //filter the same alert
     if(!memcmp(dms_alert, dms_alert_last, sizeof(dms_alert))){
@@ -1031,72 +1033,66 @@ void deal_wsi_dms_info(WsiFrame *can)
         goto out;
     }
 #if 0
-    printf("msg.alert_eye_close1 %d\n", msg.alert_eye_close1);
-    printf("msg.alert_eye_close2 %d\n", msg.alert_eye_close2);
-    printf("msg.alert_look_around %d\n", msg.alert_look_around);
-    printf("msg.alert_yawn %d\n", msg.alert_yawn);
-    printf("msg.alert_phone %d\n", msg.alert_phone);
-    printf("msg.alert_smoking %d\n", msg.alert_smoking);
-    printf("msg.alert_absence %d\n", msg.alert_absence);
-    printf("msg.alert_bow %d\n", msg.alert_bow);
+    printf("cur->alert_eye_close1 %d\n", cur->alert_eye_close1);
+    printf("cur->alert_eye_close2 %d\n", cur->alert_eye_close2);
+    printf("cur->alert_look_around %d\n", cur->alert_look_around);
+    printf("cur->alert_yawn %d\n", cur->alert_yawn);
+    printf("cur->alert_phone %d\n", cur->alert_phone);
+    printf("cur->alert_smoking %d\n", cur->alert_smoking);
+    printf("cur->alert_absence %d\n", cur->alert_absence);
+    printf("cur->alert_bow %d\n", cur->alert_bow);
 #endif
 
-    //按照优先级检查
-    if(msg.alert_eye_close1 || msg.alert_eye_close2 || msg.alert_yawn){
-        alert_type = DMS_FATIGUE_WARN;
-        if(!filter_alert_by_time(&dms_fatigue_warn, FILTER_DMS_ALERT_SET_TIME)){
-            goto out;
-        }
-        if(!filter_alert_by_speed())
-            goto out;
-    }else if (msg.alert_look_around || msg.alert_bow){ //低头作为分神报警
-        alert_type = DMS_DISTRACT_WARN;
-        if(!filter_alert_by_time(&dms_distract_warn, FILTER_DMS_ALERT_SET_TIME)){
-            goto out;
-        }
-        if(!filter_alert_by_speed())
-            goto out;
-    }else if(msg.alert_phone){
-        alert_type = DMS_CALLING_WARN;
-        if(!filter_alert_by_time(&dms_calling_warn, FILTER_DMS_ALERT_SET_TIME)){
-            goto out;
-        }
-        if(!filter_alert_by_speed())
-            goto out;
-    }else if(msg.alert_smoking){
-        alert_type = DMS_SMOKING_WARN;
-        if(!filter_alert_by_time(&dms_smoking_warn, FILTER_DMS_ALERT_SET_TIME)){
-            goto out;
-        }
-        if(!filter_alert_by_speed())
-            goto out;
-    }else if(msg.alert_absence){
-        alert_type = DMS_ABNORMAL_WARN;
-        //status_flag = SB_WARN_STATUS_BEGIN;
-        if(!filter_alert_by_time(&dms_abnormal_warn, FILTER_DMS_ALERT_SET_TIME)){
-            goto out;
-        }
-        if(!filter_alert_by_speed())
-            goto out;
-    }else
+    if(!filter_alert_by_speed())
         goto out;
 
-#if 1
-    playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
-    printf("send dms alert %d!\n", alert_type);
-    printf("dms alert frame len = %ld\n", sizeof(*uploadmsg));
-    //printbuf((uint8_t *)uploadmsg, playloadlen);
-    message_queue_send(pSend, \
-            SAMPLE_DEVICE_ID_DMS,\
-            SAMPLE_CMD_WARNING_REPORT,\
-            (uint8_t *)uploadmsg,\
-            playloadlen);
-#endif
+    //按照优先级检查
+    if((cur->alert_eye_close1 && !last->alert_eye_close1) ||\
+            (cur->alert_eye_close2 && !last->alert_eye_close2) ||\
+            (cur->alert_yawn && !last->alert_yawn)){
+
+
+        alert_type = DMS_FATIGUE_WARN;
+        if(filter_alert_by_time(&dms_fatigue_warn, FILTER_DMS_ALERT_SET_TIME)){
+            playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
+            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+        }
+    }
+    if ((cur->alert_look_around && !last->alert_look_around) ||\
+            (cur->alert_bow && !last->alert_bow)){ //低头作为分神报警
+
+        alert_type = DMS_DISTRACT_WARN;
+        if(filter_alert_by_time(&dms_distract_warn, FILTER_DMS_ALERT_SET_TIME)){
+            playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
+            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+        }
+    }
+    if(cur->alert_phone && !last->alert_phone){
+        alert_type = DMS_CALLING_WARN;
+        if(filter_alert_by_time(&dms_calling_warn, FILTER_DMS_ALERT_SET_TIME)){
+            playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
+            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+        }
+    }
+    if(cur->alert_smoking && !last->alert_smoking){
+        alert_type = DMS_SMOKING_WARN;
+        if(filter_alert_by_time(&dms_smoking_warn, FILTER_DMS_ALERT_SET_TIME)){
+            playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
+            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+        }
+    }
+    if(cur->alert_absence && !last->alert_absence){
+        alert_type = DMS_ABNORMAL_WARN;
+        //status_flag = SB_WARN_STATUS_BEGIN;
+        if(filter_alert_by_time(&dms_abnormal_warn, FILTER_DMS_ALERT_SET_TIME)){
+            playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
+            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+        }
+    }
 
 out:
     memcpy(dms_alert_last, dms_alert, sizeof(dms_alert));
     return;
-#endif
 }
 #else
 void deal_wsi_dms_info2(dms_can_779 *msg)
@@ -2604,6 +2600,34 @@ void *pthread_snap_shot(void *p)
     }
     pthread_exit(NULL);
 }
+
+
+char *dms_warning_type_to_str(uint8_t type)
+{
+    static char s_name[20];
+    strcpy(s_name, "default");
+    switch(type)
+    {
+        case DMS_FATIGUE_WARN:
+            return strcpy(s_name, "fatigue_warn");
+        case DMS_CALLING_WARN:
+            return strcpy(s_name, "calling_warn");
+        case DMS_SMOKING_WARN:
+            return strcpy(s_name, "smoking_warn");
+        case DMS_DISTRACT_WARN:
+            return strcpy(s_name, "distract_warn");
+        case DMS_ABNORMAL_WARN:
+            return strcpy(s_name, "absence_warn");
+        case DMS_SANPSHOT_EVENT:
+            return strcpy(s_name, "dms_snap_warn");
+        case DMS_DRIVER_CHANGE:
+            return strcpy(s_name, "change_warn");
+        default:
+            return strcpy(s_name, "default");
+
+    }
+}
+
 
 #define FCW_NAME            "FCW"
 #define LDW_NAME            "LDW"
