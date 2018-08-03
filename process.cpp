@@ -1042,14 +1042,14 @@ void deal_wsi_dms_info(WsiFrame *can)
 #endif
 
     //按照优先级检查
-    if(msg.alert_eye_close1 || msg.alert_eye_close2 || msg.alert_yawn || msg.alert_bow){
+    if(msg.alert_eye_close1 || msg.alert_eye_close2 || msg.alert_yawn){
         alert_type = DMS_FATIGUE_WARN;
         if(!filter_alert_by_time(&dms_fatigue_warn, FILTER_DMS_ALERT_SET_TIME)){
             goto out;
         }
         if(!filter_alert_by_speed())
             goto out;
-    }else if (msg.alert_look_around ){
+    }else if (msg.alert_look_around || msg.alert_bow){ //低头作为分神报警
         alert_type = DMS_DISTRACT_WARN;
         if(!filter_alert_by_time(&dms_distract_warn, FILTER_DMS_ALERT_SET_TIME)){
             goto out;
