@@ -410,13 +410,17 @@ void write_one_jpeg(InfoForStore *mm, RBFrame* pFrame, int index)
 {
     char filepath[100];
     MmInfo_node node;
+    char logbuf[256];
 
     mmid_to_filename(mm->photo_id[index], 0, filepath);
 
     fprintf(stdout, "Saving image file...%s\n", filepath);
     int rc = write_file(filepath, pFrame->data, pFrame->dataLen);
     if (rc == 0) {
-        printf("Image saved to [%s]\n", filepath);
+        printf("write file:%s\n", filepath);
+        snprintf(logbuf, sizeof(logbuf), "Saving image file %s\n", filepath);
+        data_log(logbuf);
+
     } else {
         fprintf(stderr, "Cannot save image to %s\n", filepath);
     }
@@ -437,7 +441,6 @@ uint32_t store_jpeg(CRingBuf* pRB, InfoForStore *mm)
     int64_t old_pts = 0;
     
     printf("%s enter!\n", __FUNCTION__);
-
     if(!mm->photo_enable){
         return take_time;
     }

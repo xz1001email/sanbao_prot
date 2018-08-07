@@ -762,14 +762,14 @@ void record_alert_log(uint8_t time[6], int type)
 {
     char logbuf[256];
     //write log
-    snprintf(logbuf, sizeof(logbuf), "[%d-%d-%d %d:%d:%d] warn_type:%d",\
+    snprintf(logbuf, sizeof(logbuf), "[%d-%d-%d %d:%d:%d] warn_type:%s",\
             time[0],\
             time[1],\
             time[2],\
             time[3],\
             time[4],\
             time[5],\
-            type); 
+            warning_type_to_str(type)); 
     data_log(logbuf);
     
 }
@@ -887,7 +887,7 @@ int build_dms_warn_frame(int type, char status_flag, DsmWarnFrame *uploadmsg)
     DmsParaSetting para;
     RealTimeData tmp;
 
-    printf("%s alert happened!\n",dms_warning_type_to_str(type));
+    printf("%s alert happened!\n", warning_type_to_str(type));
 
     read_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
     memset(&mm, 0, sizeof(mm));
@@ -1370,6 +1370,7 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
     static time_t fcw_alert = 0;
     static time_t ldw_alert = 0;
     char logbuf[256];
+    static char s_start_flag = 0;
 
     uint32_t i = 0;
     uint8_t all_warning_masks[sizeof(MECANWarningMessage)] = {
@@ -1466,19 +1467,29 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                 }
             }
 #else
+
+
             if (HW_LEVEL_RED_CAR == can.headway_warning_level) {
-                playloadlen = build_adas_warn_frame(SB_WARN_TYPE_HW, SB_WARN_STATUS_BEGIN, uploadmsg);
-                WSI_DEBUG("send HW alert start message!\n");
-                message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
-                        (uint8_t *)uploadmsg, \
-                        playloadlen);
+                if(!filter_alert_by_time(&hw_alert, FILTER_ADAS_ALERT_SET_TIME)){
+                    printf("hw filter alert by time!\n");
+                }else{
+
+                    playloadlen = build_adas_warn_frame(SB_WARN_TYPE_HW, SB_WARN_STATUS_BEGIN, uploadmsg);
+                    WSI_DEBUG("send HW alert start message!\n");
+                    message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
+                            (uint8_t *)uploadmsg, \
+                            playloadlen);
+                    s_start_flag = 1;
+                }
+
             } else if (HW_LEVEL_RED_CAR == \
-                    g_last_warning_data.headway_warning_level) {
+                    g_last_warning_data.headway_warning_level && s_start_flag) {
                 playloadlen = build_adas_warn_frame(SB_WARN_TYPE_HW, SB_WARN_STATUS_END, uploadmsg);
                 WSI_DEBUG("send HW alert end message!\n");
                 message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
                         (uint8_t *)uploadmsg,\
                         playloadlen);
+                s_start_flag = 0;
             }
 #endif
         }
@@ -1569,6 +1580,7 @@ static int32_t send_mm_req_ack(SBProtHeader *pHeader, int len)
     SBMmHeader *mm_ptr = NULL;
     SBMmHeader2 send_mm;
     int ret = 0;
+    char logbuf[256];
 
     if(pHeader->cmd == SAMPLE_CMD_REQ_MM_DATA && !g_pkg_status_p->mm_data_trans_waiting) //recv req
     {
@@ -1589,6 +1601,9 @@ static int32_t send_mm_req_ack(SBProtHeader *pHeader, int len)
         printf("req mm_id = %10u\n", mm_id);
 
         filesize = find_local_image_name(mm_type, mm_id,  g_pkg_status_p->filepath);
+        snprintf(logbuf, sizeof(logbuf), "try find file:%s\n",g_pkg_status_p->filepath);
+        data_log(logbuf);
+
         if(filesize > 0){//media found
             printf("find file ok!\n");
             //send ack
@@ -1633,6 +1648,7 @@ static int recv_ack_and_send_image(SBProtHeader *pHeader, int32_t len)
     SendStatus pkg;
     MmAckInfo mmack;
     uint32_t id;
+    char logbuf[256];
 
     //WSI_DEBUG("recv ack...........!\n");
     memcpy(&mmack, pHeader+1, sizeof(mmack));
@@ -1652,6 +1668,9 @@ static int recv_ack_and_send_image(SBProtHeader *pHeader, int32_t len)
             if(g_pkg_status_p->mm.packet_total_num == g_pkg_status_p->mm.packet_index){
                 g_pkg_status_p->mm_data_trans_waiting = 0;
                 printf("transmit one file over!\n");
+                snprintf(logbuf, sizeof(logbuf), "transmit file over:%s",\
+                        g_pkg_status_p->filepath);
+                data_log(logbuf);
 
                 id = g_pkg_status_p->mm.id;
                 delete_mm_resource(id);
@@ -2641,6 +2660,8 @@ char *warning_type_to_str(uint8_t type)
 {
     static char s_name[20];
     strcpy(s_name, "default");
+
+#if defined ENABLE_ADAS
     switch(type)
     {
         case SB_WARN_TYPE_FCW:
@@ -2662,6 +2683,29 @@ char *warning_type_to_str(uint8_t type)
         default:
             return s_name;
     }
+#elif defined ENABLE_DMS
+    switch(type)
+    {
+        case DMS_FATIGUE_WARN:
+            return strcpy(s_name, "fatigue_warn");
+        case DMS_CALLING_WARN:
+            return strcpy(s_name, "calling_warn");
+        case DMS_SMOKING_WARN:
+            return strcpy(s_name, "smoking_warn");
+        case DMS_DISTRACT_WARN:
+            return strcpy(s_name, "distract_warn");
+        case DMS_ABNORMAL_WARN:
+            return strcpy(s_name, "absence_warn");
+        case DMS_SANPSHOT_EVENT:
+            return strcpy(s_name, "dms_snap_warn");
+        case DMS_DRIVER_CHANGE:
+            return strcpy(s_name, "change_warn");
+        default:
+            return strcpy(s_name, "default");
+
+    }
+#endif
+
 }
 
 int str_to_warning_type(char *type, uint8_t *val)
