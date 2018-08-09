@@ -695,6 +695,21 @@ int filter_alert_by_time(time_t *last, unsigned int secs)
     return 1;
 }
 
+
+int touch_time(time_t *last)
+{
+    struct timespec tv;
+
+	clock_gettime(CLOCK_MONOTONIC, &tv);
+    *last = tv.tv_sec;
+
+    return 0;
+}
+
+
+
+
+
 int filter_alert_by_speed()
 {
     RealTimeData tmp;
@@ -1470,6 +1485,7 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
 
 
             if (HW_LEVEL_RED_CAR == can.headway_warning_level) {
+                //要和上一次结束的时间比较
                 if(!filter_alert_by_time(&hw_alert, FILTER_ADAS_ALERT_SET_TIME)){
                     printf("hw filter alert by time!\n");
                 }else{
@@ -1490,6 +1506,9 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                         (uint8_t *)uploadmsg,\
                         playloadlen);
                 s_start_flag = 0;
+                
+                //结束的时候更新时间。
+                touch_time(&hw_alert);
             }
 #endif
         }
