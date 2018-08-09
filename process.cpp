@@ -798,6 +798,10 @@ int build_adas_warn_frame(int type, char status_flag, AdasWarnFrame *uploadmsg)
     int i=0;
     InfoForStore mm;
     AdasParaSetting para;
+    AdasWarnFrame uploadmsg_begin;
+    uint8_t txbuf[512];
+    static SBMmHeader s_media_begin[20];
+    static char s_media_num;
 
     read_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
     memset(&mm, 0, sizeof(mm));
@@ -812,12 +816,12 @@ int build_adas_warn_frame(int type, char status_flag, AdasWarnFrame *uploadmsg)
     uploadmsg->mm_num = 0;
     get_real_time_msg(uploadmsg);
 
-#if 1
-    if(status_flag == SB_WARN_STATUS_BEGIN){
+
+    if(status_flag == SB_WARN_STATUS_END){
         goto out;
     }
-#endif
 
+    //fill media info
     mm.warn_type = type;
     switch(type)
     {
@@ -885,7 +889,17 @@ int build_adas_warn_frame(int type, char status_flag, AdasWarnFrame *uploadmsg)
         default:
             break;
     }
+    if(status_flag == SB_WARN_STATUS_BEGIN){
+        memcpy(s_media_begin, uploadmsg->mm, uploadmsg->mm_num);
+        s_media_num = uploadmsg->mm_num;
+        printf("begin media num = %d\n", s_media_num);
+    }
 out:
+    if(status_flag == SB_WARN_STATUS_END){
+        memcpy(uploadmsg->mm, s_media_begin, s_media_num);
+        uploadmsg->mm_num = s_media_num;
+        printf("end media num = %d\n", uploadmsg->mm_num);
+    }
     return (sizeof(*uploadmsg) + uploadmsg->mm_num*sizeof(SBMmHeader));
 }
 
