@@ -146,8 +146,9 @@ int clear_media()
     int ret = 0;
     char create_path_cmd[100];
     char clear_media_cmd[100];
-    sprintf(clear_media_cmd, "rm %s -rf", SNAP_SHOT_JPEG_PATH);
-    ret = system(clear_media_cmd);
+
+    //sprintf(clear_media_cmd, "rm %s -rf", SNAP_SHOT_JPEG_PATH);
+    //ret = system(clear_media_cmd);
 
     sprintf(create_path_cmd, "busybox mkdir -p %s", SNAP_SHOT_JPEG_PATH);
     ret = system(create_path_cmd);
@@ -754,22 +755,42 @@ void mmid_to_filename(uint32_t id, uint8_t type, char *filepath)
 void filter_media_num(InfoForStore *mm)
 {
     char filepath[100];
+    char clear_file[100];
     int i;
     if(mm->photo_enable){
         for(i=0; i<mm->photo_num; i++){
             if(mm->photo_id[i] > SAVE_MEDIA_NUM_MAX){
                 mmid_to_filename(mm->photo_id[i]-SAVE_MEDIA_NUM_MAX, 0, filepath);
                 printf("delete old media:%s\n", filepath);
+                //snprintf(clear_file, sizeof(clear_file), "rm %s", filepath);
+                //system(clear_file);
                 remove(filepath);
             }
+
+        }
+        
+        //if file exsist, delete
+        for(i=0; i<mm->photo_num; i++){
+            mmid_to_filename(mm->photo_id[i], 0, filepath);
+            printf("try delete cur media:%s\n", filepath);
+            //snprintf(clear_file, sizeof(clear_file), "rm %s", filepath);
+            //system(clear_file);
+            remove(filepath);
         }
     }
     if(mm->video_enable){
         if( mm->video_id[0] > SAVE_MEDIA_NUM_MAX){
             mmid_to_filename(mm->video_id[0]-SAVE_MEDIA_NUM_MAX, 0, filepath);
             printf("delete old media:%s\n", filepath);
+            //snprintf(clear_file, sizeof(clear_file), "rm %s", filepath);
+            //system(clear_file);
             remove(filepath);
         }
+        mmid_to_filename(mm->video_id[0], 0, filepath);
+        printf("delete cur media:%s\n", filepath);
+        //snprintf(clear_file, sizeof(clear_file), "rm %s", filepath);
+        //system(clear_file);
+        remove(filepath);
     }
 }
 

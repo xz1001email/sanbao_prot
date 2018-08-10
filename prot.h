@@ -9,7 +9,8 @@
 
 
 
-#define SAVE_MEDIA_NUM_MAX 100
+//#define SAVE_MEDIA_NUM_MAX 100
+#define SAVE_MEDIA_NUM_MAX 2000
 #define SAVE_ANOTHER_CAMERA_VIDEO
 //#define USE_CAN760_MESSAGE
 
@@ -28,12 +29,10 @@
 #define IS_EXIT_MSG(flag)   (flag == EXIT_MSG)
 
 #if defined ENABLE_ADAS
-#define DO_DELETE_SNAP_SHOT_FILES "rm -r /data/snap/adas/*"
 #define SNAP_SHOT_JPEG_PATH "/data/snap/adas/"
 //#define SNAP_SHOT_JPEG_PATH "/mnt/obb/adas/"
 
 #elif defined ENABLE_DMS
-#define DO_DELETE_SNAP_SHOT_FILES "rm -r /data/snap/dms/*"
 #define SNAP_SHOT_JPEG_PATH "/data/snap/dms/"
 //#define SNAP_SHOT_JPEG_PATH "/mnt/obb/dms/"
 #endif
