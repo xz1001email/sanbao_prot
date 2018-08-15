@@ -141,21 +141,44 @@ void sem_send_init()
     sem_init(&send_data, 0, 0);
 }
 
-int clear_media()
+char snap_path[100];
+
+#define USING_OLD_PATH
+
+void create_snap_path()
 {
     int ret = 0;
+    uint8_t cur_time[6];
     char create_path_cmd[100];
+
+#ifdef USING_OLD_PATH
+    sprintf(create_path_cmd, "busybox mkdir -p %s", SNAP_SHOT_JPEG_PATH);
+#else
+
+    get_local_time(cur_time);
+    srand(time(NULL));
+    snprintf(snap_path, sizeof(snap_path), "%s%08x/", SNAP_SHOT_JPEG_PATH, rand());
+    //snprintf(snap_path, sizeof(snap_path), "%s%02d%02d%02d-%02d%02d%02d/", SNAP_SHOT_JPEG_PATH, cur_time[0], cur_time[1], cur_time[2], cur_time[3], cur_time[4], cur_time[5]);
+    sprintf(create_path_cmd, "busybox mkdir -p %s", snap_path);
+#endif
+
+    ret = system(create_path_cmd);
+}
+
+int media_filepath_init()
+{
+    int ret = 0;
     char clear_media_cmd[100];
+    char create_path_cmd[100];
 
     //sprintf(clear_media_cmd, "rm %s -rf", SNAP_SHOT_JPEG_PATH);
     //ret = system(clear_media_cmd);
 
-    sprintf(create_path_cmd, "busybox mkdir -p %s", SNAP_SHOT_JPEG_PATH);
-    ret = system(create_path_cmd);
+    create_snap_path();
+
 
     return ret;
 }
-
 
 #if defined ENABLE_ADAS
     #define PROT_LOG_NAME "/data/adasprot.log"
@@ -179,7 +202,7 @@ int global_var_init()
     read_local_adas_para_file(LOCAL_ADAS_PRAR_FILE);
     read_local_dms_para_file(LOCAL_DMS_PRAR_FILE);
 
-    if(clear_media()){
+    if(media_filepath_init()){
         return -1;
     }
     //read_local_file_to_list();
@@ -744,15 +767,18 @@ int filter_alert_by_speed()
 
 void mmid_to_filename(uint32_t id, uint8_t type, char *filepath)
 {
+#ifdef USING_OLD_PATH
     sprintf(filepath,"%s%010u", SNAP_SHOT_JPEG_PATH, id);
+#else
+    sprintf(filepath,"%s%010u", snap_path, id);
+#endif
 }
-
 
 /*********************************
  *产生新的报警之前，先尝试把之前的同名文件删除。
  *
  *******************************/
-void filter_media_num(InfoForStore *mm)
+void clear_old_media_file(InfoForStore *mm)
 {
     char filepath[100];
     char clear_file[100];
@@ -794,20 +820,20 @@ void filter_media_num(InfoForStore *mm)
     }
 }
 
-void record_alert_log(uint8_t time[6], int type)
+void record_alert_log(uint8_t time[6], int type, char flag)
 {
     char logbuf[256];
     //write log
-    snprintf(logbuf, sizeof(logbuf), "[%d-%d-%d %d:%d:%d] warn_type:%s",\
+    snprintf(logbuf, sizeof(logbuf), "[%02d%02d%02d %02d:%02d:%02d] warn_type:%s, flag:%d",\
             time[0],\
             time[1],\
             time[2],\
             time[3],\
             time[4],\
             time[5],\
-            warning_type_to_str(type)); 
+            warning_type_to_str(type),
+            flag); 
     data_log(logbuf);
-    
 }
 
 /*********************************
@@ -823,13 +849,14 @@ int build_adas_warn_frame(int type, char status_flag, AdasWarnFrame *uploadmsg)
     uint8_t txbuf[512];
     static SBMmHeader s_media_begin[20];
     static char s_media_num;
+    char logbuf[256];
 
     read_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
     memset(&mm, 0, sizeof(mm));
     get_adas_Info_for_store(type, &mm);
 
     get_local_time(uploadmsg->time);
-    record_alert_log(uploadmsg->time, type);
+    record_alert_log(uploadmsg->time, type, status_flag);
 
     uploadmsg->status_flag = status_flag;
     uploadmsg->warning_id = MY_HTONL(get_next_id(WARNING_ID_MODE, NULL, 0));
@@ -868,7 +895,7 @@ int build_adas_warn_frame(int type, char status_flag, AdasWarnFrame *uploadmsg)
                 i++;
             }
             mm.get_another_camera_video= 0;
-            filter_media_num(&mm);
+            clear_old_media_file(&mm);
             push_mm_queue(&mm);
 #if defined SAVE_ANOTHER_CAMERA_VIDEO
             //add dms video
@@ -882,7 +909,7 @@ int build_adas_warn_frame(int type, char status_flag, AdasWarnFrame *uploadmsg)
                     uploadmsg->mm[i].id = MY_HTONL(mm.video_id[0]);
                 }
                 mm.get_another_camera_video= 1;
-                filter_media_num(&mm);
+                clear_old_media_file(&mm);
                 push_mm_queue(&mm);
             }
 #endif
@@ -903,7 +930,7 @@ int build_adas_warn_frame(int type, char status_flag, AdasWarnFrame *uploadmsg)
                     uploadmsg->mm[i].id = MY_HTONL(mm.photo_id[i]);
                 }
                 mm.get_another_camera_video= 0;
-                filter_media_num(&mm);
+                clear_old_media_file(&mm);
                 push_mm_queue(&mm);
             }
             break;
@@ -911,16 +938,21 @@ int build_adas_warn_frame(int type, char status_flag, AdasWarnFrame *uploadmsg)
             break;
     }
     if(status_flag == SB_WARN_STATUS_BEGIN){
-        memcpy(s_media_begin, uploadmsg->mm, uploadmsg->mm_num);
+        memcpy(s_media_begin, uploadmsg->mm, sizeof(SBMmHeader) * uploadmsg->mm_num);
         s_media_num = uploadmsg->mm_num;
         printf("begin media num = %d\n", s_media_num);
     }
 out:
     if(status_flag == SB_WARN_STATUS_END){
-        memcpy(uploadmsg->mm, s_media_begin, s_media_num);
+        memcpy(uploadmsg->mm, s_media_begin, s_media_num*sizeof(SBMmHeader));
         uploadmsg->mm_num = s_media_num;
         printf("end media num = %d\n", uploadmsg->mm_num);
     }
+
+
+    //snprintf(logbuf, sizeof(logbuf), "adas alert frame:%s",g_pkg_status_p->filepath);
+    //data_log(logbuf);
+
     return (sizeof(*uploadmsg) + uploadmsg->mm_num*sizeof(SBMmHeader));
 }
 
@@ -949,7 +981,7 @@ int build_dms_warn_frame(int type, char status_flag, DsmWarnFrame *uploadmsg)
     uploadmsg->mm_num = 0;
 
     get_local_time(uploadmsg->time);
-    record_alert_log(uploadmsg->time, type);
+    record_alert_log(uploadmsg->time, type, status_flag);
 
     RealTimeDdata_process(&tmp, READ_REAL_TIME_MSG);
     uploadmsg->altitude = tmp.altitude;
@@ -992,7 +1024,7 @@ int build_dms_warn_frame(int type, char status_flag, DsmWarnFrame *uploadmsg)
                 i++;
             }
             mm.get_another_camera_video= 0;
-            filter_media_num(&mm);
+            clear_old_media_file(&mm);
             push_mm_queue(&mm);
             
             WSI_DEBUG("num2 = %d\n", uploadmsg->mm_num);
@@ -1009,7 +1041,7 @@ int build_dms_warn_frame(int type, char status_flag, DsmWarnFrame *uploadmsg)
                     uploadmsg->mm[i].id = MY_HTONL(mm.video_id[0]);
                 }
                 mm.get_another_camera_video= 1;
-                filter_media_num(&mm);
+                clear_old_media_file(&mm);
                 push_mm_queue(&mm);
                 WSI_DEBUG("num3 = %d\n", uploadmsg->mm_num);
             }
@@ -1029,7 +1061,7 @@ int build_dms_warn_frame(int type, char status_flag, DsmWarnFrame *uploadmsg)
                     uploadmsg->mm[i].id = MY_HTONL(mm.photo_id[i]);
                 }
                 mm.get_another_camera_video= 0;
-                filter_media_num(&mm);
+                clear_old_media_file(&mm);
                 push_mm_queue(&mm);
             }
             break;
@@ -1133,7 +1165,6 @@ void deal_wsi_dms_info(WsiFrame *can)
     }
     if(cur->alert_absence && !last->alert_absence){
         alert_type = DMS_ABNORMAL_WARN;
-        //status_flag = SB_WARN_STATUS_BEGIN;
         if(filter_alert_by_time(&dms_abnormal_warn, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
@@ -1403,6 +1434,14 @@ void set_BCD_time(AdasWarnFrame *uploadmsg, uint64_t usec)
     printf("%d-%d-%d %d:%d:%d\n", (1900 + p->tm_year), ( 1 + p->tm_mon), p->tm_mday,(p->tm_hour), p->tm_min, p->tm_sec); 
 }
 
+void print_arry(char *sbuf, uint8_t *buf, int len)
+{
+    int i = 0;
+    int ret;
+    for(i=0; i<len; i++){
+        ret = sprintf(&sbuf[i*ret], "%02x ", buf[i]);
+    }
+}
 
 static MECANWarningMessage g_last_warning_data;
 static MECANWarningMessage g_last_can_msg;
@@ -1419,7 +1458,8 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
     static time_t hw_alert = 0;
     static time_t fcw_alert = 0;
     static time_t ldw_alert = 0;
-    char logbuf[256];
+    //char logbuf[256];
+    char logbuf[1024];
     static char s_start_flag = 0;
 
     uint32_t i = 0;
@@ -1530,6 +1570,9 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                     message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
                             (uint8_t *)uploadmsg, \
                             playloadlen);
+                    printbuf(uploadmsg, playloadlen);
+                    print_arry(logbuf, (uint8_t *)uploadmsg, playloadlen);
+                    data_log(logbuf);
                     s_start_flag = 1;
                 }
 
@@ -1540,6 +1583,10 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                 message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
                         (uint8_t *)uploadmsg,\
                         playloadlen);
+
+                printbuf(uploadmsg, playloadlen);
+                print_arry(logbuf, (uint8_t *)uploadmsg, playloadlen);
+                data_log(logbuf);
                 s_start_flag = 0;
                 
                 //结束的时候更新时间。
@@ -1655,7 +1702,7 @@ static int32_t send_mm_req_ack(SBProtHeader *pHeader, int len)
         printf("req mm_id = %10u\n", mm_id);
 
         filesize = find_local_image_name(mm_type, mm_id,  g_pkg_status_p->filepath);
-        snprintf(logbuf, sizeof(logbuf), "try find file:%s\n",g_pkg_status_p->filepath);
+        snprintf(logbuf, sizeof(logbuf), "try find file:%s",g_pkg_status_p->filepath);
         data_log(logbuf);
 
         if(filesize > 0){//media found

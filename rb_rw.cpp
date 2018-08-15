@@ -418,7 +418,7 @@ void write_one_jpeg(InfoForStore *mm, RBFrame* pFrame, int index)
     int rc = write_file(filepath, pFrame->data, pFrame->dataLen);
     if (rc == 0) {
         printf("write file:%s\n", filepath);
-        snprintf(logbuf, sizeof(logbuf), "Saving image file %s\n", filepath);
+        snprintf(logbuf, sizeof(logbuf), "Saving image file %s", filepath);
         data_log(logbuf);
 
     } else {
