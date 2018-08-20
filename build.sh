@@ -40,5 +40,6 @@ outputpath=$output_folder`git_reversion`"/"
 mkdir -p $outputpath
 echo "generate target $outputpath"
 
+echo "cp $buildtarget $outputpath$target_dist"
 cp $buildtarget $outputpath$target_dist
 

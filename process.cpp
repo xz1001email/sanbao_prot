@@ -730,20 +730,15 @@ int touch_time(time_t *last)
     return 0;
 }
 
-
-
-
-
 int filter_alert_by_speed()
 {
     RealTimeData tmp;
     AdasParaSetting para;
     CAN760Info carinfo;
 
-   // return 1;
-#ifndef FILTER_ALERT_BY_SPEED
-    return 1;
-#endif
+    if(!g_configini.speed_filter_enable){
+        return 1;   
+    }
 
     read_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
 

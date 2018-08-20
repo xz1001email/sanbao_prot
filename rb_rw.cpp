@@ -48,6 +48,7 @@
 using namespace std;
 
 extern volatile int force_exit;
+extern LocalConfig g_configini;
 
 #define  ADAS_JPEG_SIZE (32* 1024 * 1024)
 #define  DMS_JPEG_SIZE (16* 1024 * 1024)
@@ -918,7 +919,7 @@ void *pthread_save_media(void *p)
 
 #if defined ENABLE_ADAS 
     //enable adas h264
-    ma_api_jpeg_enc_configure(MA_CAMERA_IDX_ADAS, 704, 576, 5, 50);
+    ma_api_jpeg_enc_configure(MA_CAMERA_IDX_ADAS, 704, 576, g_configini.jpeg_coder_fps, 50);
     ma_api_jpeg_enc_start(MA_CAMERA_IDX_ADAS);
     adas_rb_size = open_adas_camera(adas_rbname);
 
@@ -941,7 +942,7 @@ void *pthread_save_media(void *p)
 
 #elif defined ENABLE_DMS 
     //enable dms h264
-    ma_api_jpeg_enc_configure(MA_CAMERA_IDX_DRIVER, 704, 576, 5, 50);
+    ma_api_jpeg_enc_configure(MA_CAMERA_IDX_DRIVER, 704, 576, g_configini.jpeg_coder_fps, 50);
     ma_api_jpeg_enc_start(MA_CAMERA_IDX_DRIVER);
     dms_rb_size = open_dms_camera(dms_rbname);
 

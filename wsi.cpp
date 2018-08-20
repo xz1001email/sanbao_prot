@@ -952,6 +952,9 @@ void set_local_config_default(LocalConfig *config)
     snprintf(&config->serverip[0], sizeof(config->serverip), "%s", SERVER_IP);
     snprintf(&config->clientip[0], sizeof(config->clientip), "%s", CLIENT_IP);
     snprintf(&config->netdev_name[0], sizeof(config->netdev_name), "%s", NETDEV_NAME);
+
+    config->jpeg_coder_fps = 5;
+    config->speed_filter_enable = 1;
 }
 
 void local_config_dump(LocalConfig *config)
@@ -961,45 +964,14 @@ void local_config_dump(LocalConfig *config)
     printf("serverport: %d\n", config->serverport);
     printf("clientip: %s\n", config->clientip);
     printf("client netdev_name: %s\n", config->netdev_name);
+
+
+    printf("jpeg_coder_fps : %d\n", config->jpeg_coder_fps);
+    printf("speed_filter_enable : %d\n", config->speed_filter_enable);
+
+
     printf("***********Local config dump****************\n");
 }
-
-#if 0
-void local_config_init()
-{
-#define CONFIG_INI_NAME "config.ini"
-
-    FILE *fp;
-    fp = fopen(CONFIG_INI_NAME, "r")
-    if(!fp){
-        fprintf(stdout, "open %s fail, error:%s. using configini default!\n",\
-                CONFIG_INI_NAME, strerror(errno));
-        set_local_config_default(&g_configini);
-    }else{
-        fclose(fp);
-        load_local_config_file();
-    }
-    local_config_dump(&g_configini);
-}
-int load_local_config_file(LocalConfig *conf)
-{
-    ini_t *config = ini_load("config.ini");
-
-    const char *name = ini_get(config, "owner", "name");
-    if (name) {
-        printf("name: %s\n", name);
-    }
-
-    ini_sget(config, "tcp", "serverip", NULL, &conf->serverip);
-    ini_sget(config, "tcp", "serverport", "%d", &conf->serverport);
-
-    printf("server: %s:%d\n", conf->serverip, conf->serverport);
-
-    ini_free(config);
-    return 0;
-}
-
-#endif
 
 /*******************prot config using json**********************/
 static bool get_server_config(const rapidjson::Value& val, LocalConfig *config)
@@ -1032,6 +1004,64 @@ static bool get_client_config(const rapidjson::Value& val, LocalConfig *config)
     return true;
 }
 
+#if 0
+static bool get_alert_para(const rapidjson::Value& val, LocalConfig *config)
+{
+#if 0
+    assert(val["jpeg_fps"].IsNumber());
+    assert(val["jpeg_fps"].IsUint());
+    if (val.HasMember("jpeg_fps")) {
+        config->jpeg_coder_fps = val["jpeg_fps"].GetUint();
+    }
+
+    assert(val["speed_filter"].IsBool());
+    assert(val.HasMember("speed_filter"));
+    if(val["speed_filter"].GetBool()){
+        config->speed_filter_enable = 1;
+    }else{
+        config->speed_filter_enable = 0;
+    }
+#else
+
+    assert(val["jpeg_fps"].IsNumber());
+    assert(val["jpeg_fps"].IsUint());
+    if (val.HasMember("jpeg_fps")) {
+        config->jpeg_coder_fps = val["jpeg_fps"].GetUint();
+    }
+
+    assert(val["speed_filter_enable"].IsBool());
+    assert(val.HasMember("speed_filter_enable"));
+    if(val["speed_filter_enable"].GetBool()){
+        config->speed_filter_enable = 1;
+    }else{
+        config->speed_filter_enable = 0;
+    }
+
+#endif
+
+    return true;
+}
+#else
+static bool get_alert_para(const rapidjson::Value& val, LocalConfig *config)
+{
+
+    assert(val["speed_filter_enable"].IsBool());
+    if(val["speed_filter_enable"].GetBool()){
+        config->speed_filter_enable = 1;
+    }else{
+        config->speed_filter_enable = 0;
+    }
+
+    assert(val["jpeg_fps"].IsNumber());
+    assert(val["jpeg_fps"].IsUint());
+    if (val.HasMember("jpeg_fps")) {
+        config->jpeg_coder_fps = val["jpeg_fps"].GetUint();
+    }
+    return true;
+}
+#endif
+
+
 static int parse_prot_json(char *buffer, LocalConfig *config)
 {
     Document document;  // Default template parameter uses UTF8 and MemoryPoolAllocator.
@@ -1047,9 +1077,11 @@ static int parse_prot_json(char *buffer, LocalConfig *config)
     assert(document.IsObject()); 
     assert(document.HasMember("server"));
     assert(document.HasMember("client"));
+    assert(document.HasMember("alert_para"));
 
     get_server_config(document["server"], config);
     get_client_config(document["client"], config);
+    get_alert_para(document["alert_para"], config);
 
     return 0;
 }
@@ -1073,7 +1105,9 @@ int local_config_init()
         size = ftell(fp);
         rewind(fp);
         ret = fread(buffer, 1, size, fp);
-        printf("read %s len = %ld\n",CONFIG_INI_NAME, ret);
+        printf("read %s, len = %ld\n",CONFIG_INI_NAME, ret);
+        buffer[ret] = 0;
+        printf("%s\n", buffer);
         fclose(fp);
         if(ret != size){
             printf("read file not complete\n");

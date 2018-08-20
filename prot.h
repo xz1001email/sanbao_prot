@@ -578,8 +578,6 @@ typedef struct __DmsCanFrame {
 
 
 
-
-
 /*********************Websocket socket message****************************/
 typedef struct __WsiFrame{
     uint8_t warning[8];
@@ -602,15 +600,12 @@ typedef struct __LocalConfig {
     uint16_t clientport;
     char netdev_name[32];
 
-
     char jpeg_coder_fps; // 帧率设置
-    int  dms_alert_filter_period; //报警过滤时间
-    int  adas_alert_filter_period; //报警过滤时间
-
+    char speed_filter_enable; //报警的速度阀值
+    char time_period_filter;  //报警过滤时间
 
 } __attribute__((packed)) LocalConfig;
 /*********************local config file END****************************/
-
 
 
 
