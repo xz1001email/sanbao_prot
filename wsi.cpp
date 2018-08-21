@@ -955,6 +955,10 @@ void set_local_config_default(LocalConfig *config)
 
     config->jpeg_coder_fps = 5;
     config->speed_filter_enable = 1;
+    config->record_speed = 1;
+    config->record_period = 10;
+
+
 }
 
 void local_config_dump(LocalConfig *config)
@@ -1092,13 +1096,14 @@ int local_config_init()
     char buffer[1024];
     size_t size = 0;
     size_t ret = 0;
-
     FILE *fp;
+
+    set_local_config_default(&g_configini);
+
     fp = fopen(CONFIG_INI_NAME, "r");
     if(!fp){
         fprintf(stdout, "open %s fail, error:%s. using configini default!\n",\
                 CONFIG_INI_NAME, strerror(errno));
-        set_local_config_default(&g_configini);
     }else{
         rewind(fp);
         fseek(fp, 0, SEEK_END);

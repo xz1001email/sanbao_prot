@@ -174,7 +174,7 @@ void dms_para_check(DmsParaSetting *p)
 {
     DmsParaSetting *para = (DmsParaSetting *)p;
 
-    printf("adas para checking...!\n");
+    printf("dms para checking...!\n");
     if(para->warning_speed_val < 0 || para->warning_speed_val > 60)
     {
         para->warning_speed_val = 30;// km/h, 0-60

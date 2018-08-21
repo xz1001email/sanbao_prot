@@ -147,7 +147,6 @@ char snap_path[100];
 
 void create_snap_path()
 {
-    int ret = 0;
     uint8_t cur_time[6];
     char create_path_cmd[100];
 
@@ -162,7 +161,7 @@ void create_snap_path()
     sprintf(create_path_cmd, "busybox mkdir -p %s", snap_path);
 #endif
 
-    ret = system(create_path_cmd);
+    system(create_path_cmd);
 }
 
 int media_filepath_init()
@@ -180,6 +179,54 @@ int media_filepath_init()
     return ret;
 }
 
+
+
+int get_timestamp(char *buf, int len)
+{
+#define TIME_FORMAT  "%F %T"
+    time_t t;
+    struct tm *tmp;
+
+    t = time(NULL);
+    tmp = localtime(&t);
+    if (tmp == NULL) {
+        perror("localtime");
+        return -1;
+    }
+
+    if (strftime(buf, len, TIME_FORMAT, tmp) == 0) {
+        fprintf(stderr, "strftime returned 0");
+        return -1;
+    }
+    return 0;
+}
+
+int record_run_time()
+{
+    char logbuf[200];
+    time_t t;
+    struct tm *tmp;
+
+//#define STR_FORMAT  "run time: %A %a %B %b %C %c"
+#define STR_FORMAT  "run time: %F %T"
+
+    t = time(NULL);
+    tmp = localtime(&t);
+    if (tmp == NULL) {
+        perror("localtime");
+        return -1;
+    }
+
+    if (strftime(logbuf, sizeof(logbuf), STR_FORMAT, tmp) == 0) {
+        fprintf(stderr, "strftime returned 0");
+        return -1;
+    }
+    data_log(logbuf);
+
+    printf("%s\n", logbuf);
+    return 0;
+}
+
 #if defined ENABLE_ADAS
     #define PROT_LOG_NAME "/data/adasprot.log"
 #elif defined ENABLE_DMS
@@ -188,19 +235,14 @@ int media_filepath_init()
 
 int global_var_init()
 {
-
+    sem_send_init();
 #if defined ENABLE_ADAS
     printf("adas device enter!\n");
+    read_local_adas_para_file(LOCAL_ADAS_PRAR_FILE);
 #elif defined ENABLE_DMS
     printf("dms device enter!\n");
-#else
-    #define ENABLE_ADAS
-    printf("using default, ENABLE_ADAS!\n");
-#endif
-
-    sem_send_init();
-    read_local_adas_para_file(LOCAL_ADAS_PRAR_FILE);
     read_local_dms_para_file(LOCAL_DMS_PRAR_FILE);
+#endif
 
     if(media_filepath_init()){
         return -1;
@@ -208,6 +250,7 @@ int global_var_init()
     //read_local_file_to_list();
 
     data_log_init(PROT_LOG_NAME, false);
+    record_run_time();
 
     return 0;
 }
@@ -286,9 +329,6 @@ void can760_message_process(CAN760Info *data, int mode)
     //printf("get car speed: %d\n", data->car_speed);
 }
 
-
-
-
 void get_latitude_info(char *buffer, int len)
 {
     RealTimeData tmp;
@@ -300,9 +340,6 @@ void get_latitude_info(char *buffer, int len)
     //printf("latitude: %s\n", buffer);
 
 }
-
-
-
 
 #define WARNING_ID_MODE 0
 #define MM_ID_MODE 1
@@ -759,6 +796,57 @@ int filter_alert_by_speed()
     return 1;
 }
 
+int limit_record_time(time_t *last, unsigned int secs)
+{
+    struct timespec tv;
+
+	clock_gettime(CLOCK_MONOTONIC, &tv);
+    if (tv.tv_sec - (*last) < secs){
+        return 0;
+    }
+
+    *last = tv.tv_sec;
+    return 1;
+}
+
+int record_speed()
+{
+#define RECORD_TIME_PERIOD_MIN  5u
+    RealTimeData tmp;
+    CAN760Info carinfo;
+    char time_str[50];
+    char logbuf[200];
+    static time_t s_record_last = 0;
+    uint32_t period = 0;
+
+#if defined ENABLE_ADAS
+    if(!g_configini.record_speed){
+        return 0;   
+    }
+    
+
+    if(g_configini.record_period < RECORD_TIME_PERIOD_MIN){
+        period = RECORD_TIME_PERIOD_MIN;
+    }else{
+        period = g_configini.record_period;
+    }
+    printf("period = %d\n", period);
+
+    if(!limit_record_time(&s_record_last, period)){
+       return 0;
+    }
+
+    RealTimeDdata_process(&tmp, READ_REAL_TIME_MSG);
+    can760_message_process(&carinfo, READ_REAL_TIME_MSG);
+    tmp.car_speed = carinfo.speed;
+    get_timestamp(time_str, sizeof(time_str));
+    printf("[%s] speed: %d km/h", time_str, carinfo.speed);
+    snprintf(logbuf, sizeof(logbuf), "[%s] speed: %d km/h", time_str, carinfo.speed);
+    data_log(logbuf);
+#endif
+    return 0;
+}
+
 
 void mmid_to_filename(uint32_t id, uint8_t type, char *filepath)
 {
@@ -815,11 +903,13 @@ void clear_old_media_file(InfoForStore *mm)
     }
 }
 
-void record_alert_log(uint8_t time[6], int type, char flag)
+void record_alert_log(uint8_t time[6], int type, uint8_t flag)
 {
+    char status[3][20] = {"trigger", "begin", "end"};
+
     char logbuf[256];
     //write log
-    snprintf(logbuf, sizeof(logbuf), "[%02d%02d%02d %02d:%02d:%02d] warn_type:%s, flag:%d",\
+    snprintf(logbuf, sizeof(logbuf), "[%02d%02d%02d %02d:%02d:%02d] warn_type:%s, status:%s",\
             time[0],\
             time[1],\
             time[2],\
@@ -827,7 +917,7 @@ void record_alert_log(uint8_t time[6], int type, char flag)
             time[4],\
             time[5],\
             warning_type_to_str(type),
-            flag); 
+            status[flag]); 
     data_log(logbuf);
 }
 
@@ -835,7 +925,7 @@ void record_alert_log(uint8_t time[6], int type, char flag)
 * func: build adas warning package
 * return: framelen
 *********************************/
-int build_adas_warn_frame(int type, char status_flag, AdasWarnFrame *uploadmsg)
+int build_adas_warn_frame(int type, uint8_t status_flag, AdasWarnFrame *uploadmsg)
 {
     int i=0;
     InfoForStore mm;
@@ -957,7 +1047,7 @@ char *dms_warning_type_to_str(uint8_t type);
 * func: build dms warning package
 * return: framelen
 *********************************/
-int build_dms_warn_frame(int type, char status_flag, DsmWarnFrame *uploadmsg)
+int build_dms_warn_frame(int type, uint8_t status_flag, DsmWarnFrame *uploadmsg)
 {
     int i=0;
     InfoForStore mm;
@@ -1263,8 +1353,7 @@ static int send_package(int sock, uint8_t *buf)
     int len = 0;
     int i = 0;
     struct timespec ts;
-    if(sock < 0)
-    {
+    if(sock < 0){
         printf("sock error\n");
         return -1;
     }
@@ -1275,8 +1364,7 @@ static int send_package(int sock, uint8_t *buf)
 
     //fail
     if(ptr_queue_pop(g_send_q_p, &header, &ptr_queue_lock)){
-        
-        printf("queue no mesg\n");
+        printf("queue no msg\n");
         goto out;
     }
 
@@ -1370,12 +1458,9 @@ void send_snap_shot_ack(SBProtHeader *pHeader, int32_t len)
     uint8_t ack = 0;
     SBProtHeader *pSend = (SBProtHeader *) txbuf;
 
-    if(len == sizeof(SBProtHeader) + 1)
-    {
+    if(len == sizeof(SBProtHeader) + 1){
         message_queue_send(pSend, pHeader->device_id, SAMPLE_CMD_SNAP_SHOT, (uint8_t *)&ack, 1);
-    }
-    else
-    {
+    }else{
         printf("recv cmd:0x%x, data len maybe error!\n", pHeader->cmd);
     }
 }
@@ -1399,7 +1484,7 @@ int do_snap_shot()
 #elif defined ENABLE_ADAS
     AdasWarnFrame *uploadmsg = (AdasWarnFrame *)&msgbuf[0];
     playloadlen = build_adas_warn_frame(SB_WARN_TYPE_SNAP, SB_WARN_STATUS_NONE, uploadmsg);
-    printf("sanp len = %d\n", playloadlen);
+    printf("snap len = %d\n", playloadlen);
     message_queue_send(pSend, \
             SAMPLE_DEVICE_ID_ADAS,\
             SAMPLE_CMD_WARNING_REPORT,\
@@ -1565,9 +1650,11 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                     message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
                             (uint8_t *)uploadmsg, \
                             playloadlen);
+#if 0
                     printbuf(uploadmsg, playloadlen);
                     print_arry(logbuf, (uint8_t *)uploadmsg, playloadlen);
                     data_log(logbuf);
+#endif
                     s_start_flag = 1;
                 }
 
@@ -1578,10 +1665,11 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                 message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
                         (uint8_t *)uploadmsg,\
                         playloadlen);
-
+#if 0
                 printbuf(uploadmsg, playloadlen);
                 print_arry(logbuf, (uint8_t *)uploadmsg, playloadlen);
                 data_log(logbuf);
+#endif
                 s_start_flag = 0;
                 
                 //结束的时候更新时间。
@@ -2676,37 +2764,44 @@ void *pthread_snap_shot(void *p)
 #endif
     RealTimeData rt_data;;
     uint32_t mileage_last = 0;
+    time_t last = 0;
 
     prctl(PR_SET_NAME, "pthread_snap");
 
     while(!force_exit)
     {
+        printf("snap_pthread...\n");
+        record_speed();
         read_dev_para(&tmp, para_type);
-#if 1
+
+        //定时拍照
         if(tmp.auto_photo_mode == SNAP_SHOT_BY_TIME){
-            printf("auto snap shot!\n");
-            if(tmp.auto_photo_time_period != 0)
-                do_snap_shot();
-            sleep(tmp.auto_photo_time_period);
-#else
-        if(1){
-            sleep(5);
-            if(1)
-            {
-                printf("auto snap shot!\n");
-                do_snap_shot();
+            if(tmp.auto_photo_time_period != 0){
+                //超时抓拍
+                if(limit_record_time(&last, tmp.auto_photo_time_period)){
+                    printf("auto snap shot!\n");
+                    do_snap_shot();
+                }else{
+                    usleep(200000);
+                }
+            }else{//0不抓拍
+                usleep(200000);
             }
-#endif
+            //定距拍照
         }else if(tmp.auto_photo_mode == SNAP_SHOT_BY_DISTANCE){
             RealTimeDdata_process(&rt_data, READ_REAL_TIME_MSG);
-            if((rt_data.mileage - mileage_last)*100 >= tmp.auto_photo_distance_period){
-                if(mileage_last != 0){
-                    printf("snap by mileage!\n");
-                    do_snap_shot();
+
+            if(tmp.auto_photo_distance_period != 0){
+                if((rt_data.mileage - mileage_last)*100 >= tmp.auto_photo_distance_period){
+                    if(mileage_last != 0){
+                        printf("snap by mileage!\n");
+                        do_snap_shot();
+                    }
+                    mileage_last = rt_data.mileage; //单位是0.1km
+                }else{
+                    usleep(200000);
                 }
-                mileage_last = rt_data.mileage; //单位是0.1km
-            }else{
-                //sleep(1);
+            }else{//0不抓拍
                 usleep(200000);
             }
         }else{
