@@ -956,7 +956,7 @@ void set_local_config_default(LocalConfig *config)
     config->jpeg_coder_fps = 5;
     config->speed_filter_enable = 1;
     config->record_speed = 1;
-    config->record_period = 10;
+    config->record_period = 30;
 
     config->use_heart = 1;
     config->check_heart_period = 300;

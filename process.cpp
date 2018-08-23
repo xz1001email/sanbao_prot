@@ -2240,25 +2240,24 @@ int recv_upgrade_file(SBProtHeader *pHeader, int32_t len)
             message_id == UPGRADE_CMD_RUN)
     {
 
-        if(message_id == UPGRADE_CMD_CLEAN)
-        {
-            system(CLEAN_MPK);
+        if(message_id == UPGRADE_CMD_CLEAN){
             //do clean
+            system(CLEAN_MPK);
         }
-        if(message_id == UPGRADE_CMD_RUN)
-        {
+        if(message_id == UPGRADE_CMD_RUN){
             //do run, do upgrade
-            printf("exe new app...\n");
-           // system(UPGRADE_FILE_CMD);
-            //system("stop bootanim;echo 'restart...';/system/bin/main.sh");
-
             ack[0] = message_id;
             ack[1] = 0;
             message_queue_send(pSend,pHeader->device_id, SAMPLE_CMD_UPGRADE, \
                     ack, sizeof(ack));
 
-            system("touch /mnt/obb/restart");
-            //system("/data/restart.sh &");
+            printf("exe new app...\n");
+#if defined ENABLE_ADAS
+            system("killall DsmProt");
+#elif defined ENABLE_DMS
+            system("killall AdasProt");
+#endif
+            exit(0);
             //return 0;
         }
         ack[0] = message_id;
@@ -2308,6 +2307,7 @@ int recv_upgrade_file(SBProtHeader *pHeader, int32_t len)
                 {
                     printf("sun check ok!\n");
                     data_ack[5] = 0;
+
                     printf("upgrade...\n");
                     system(UPGRADE_FILE_CMD);
                 }
@@ -2341,7 +2341,7 @@ static int32_t sample_on_cmd(SBProtHeader *pHeader, int32_t len)
         15, "MINIEYE",
         15, "M4",
         15, "1.0.0.1",
-        15, "1.0.1.9", //soft version
+        15, "1.1.0.0", //soft version
         15, "0xF0321564",
         15, "SAMPLE",
     };
