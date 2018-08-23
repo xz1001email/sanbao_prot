@@ -823,11 +823,11 @@ static const struct lws_protocols protocols[] = {
 };
 
 
+void tcp_socket_close();
 void notice_tcp_send_exit();
-void pthread_tcp_recv_exit();
 void pthread_exit_notice(void)
 {
-    pthread_tcp_recv_exit();
+    //tcp_socket_close();
     notice_tcp_send_exit();
 }
 
@@ -958,7 +958,8 @@ void set_local_config_default(LocalConfig *config)
     config->record_speed = 1;
     config->record_period = 10;
 
-
+    config->use_heart = 1;
+    config->check_heart_period = 300;
 }
 
 void local_config_dump(LocalConfig *config)
@@ -972,6 +973,13 @@ void local_config_dump(LocalConfig *config)
 
     printf("jpeg_coder_fps : %d\n", config->jpeg_coder_fps);
     printf("speed_filter_enable : %d\n", config->speed_filter_enable);
+
+    printf("record_speed : %d\n", config->record_speed);
+    printf("record_period : %d\n", config->record_period);
+
+
+    printf("use_heart : %d\n", config->use_heart);
+    printf("check_heart_period : %d\n", config->check_heart_period);
 
 
     printf("***********Local config dump****************\n");
@@ -1061,6 +1069,33 @@ static bool get_alert_para(const rapidjson::Value& val, LocalConfig *config)
     if (val.HasMember("jpeg_fps")) {
         config->jpeg_coder_fps = val["jpeg_fps"].GetUint();
     }
+
+    assert(val["record_speed"].IsBool());
+    if(val["record_speed"].GetBool()){
+        config->record_speed = 1;
+    }else{
+        config->record_speed = 0;
+    }
+
+    assert(val["record_period"].IsNumber());
+    assert(val["record_period"].IsUint());
+    if (val.HasMember("record_period")) {
+        config->record_period = val["record_period"].GetUint();
+    }
+
+    assert(val["use_heart"].IsBool());
+    if(val["use_heart"].GetBool()){
+        config->use_heart= 1;
+    }else{
+        config->use_heart= 0;
+    }
+
+    assert(val["check_heart_period"].IsNumber());
+    assert(val["check_heart_period"].IsUint());
+    if (val.HasMember("check_heart_period")) {
+        config->check_heart_period= val["check_heart_period"].GetUint();
+    }
+
     return true;
 }
 #endif

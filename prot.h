@@ -606,6 +606,10 @@ typedef struct __LocalConfig {
     char record_speed;
     uint32_t record_period;
 
+    char use_heart;
+    uint32_t check_heart_period;
+
+
 } __attribute__((packed)) LocalConfig;
 /*********************local config file END****************************/
 

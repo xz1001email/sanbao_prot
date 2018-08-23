@@ -179,8 +179,6 @@ int media_filepath_init()
     return ret;
 }
 
-
-
 int get_timestamp(char *buf, int len)
 {
 #define TIME_FORMAT  "%F %T"
@@ -286,6 +284,50 @@ void notice_ack_msg()
     pthread_cond_signal(&recv_ack_cond);
     pthread_mutex_unlock(&recv_ack_mutex);
 }
+
+
+#define WRITE_MSG 0
+#define READ_MSG  1
+#define HEART_BEAT_ALIVE 1
+#define HEART_BEAT_DEATH 0
+char heart_beat_process(char status, int mode)
+{
+    static char heart_beat_status = HEART_BEAT_DEATH;
+    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+    pthread_mutex_lock(&lock);
+    if(mode == WRITE_MSG){
+        heart_beat_status = status;
+    }else if(mode == READ_MSG){
+        status = heart_beat_status;
+    }
+    pthread_mutex_unlock(&lock);
+
+    return status;
+}
+
+
+#define SET_CONNECT_STATUS 0
+#define GET_CONNECT_STATUS 1
+#define CONNECT_ON 1
+#define CONNECT_OFF 0
+int process_socket_status(char status, int mode)
+{
+    static char connect_status = CONNECT_OFF;
+    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+    pthread_mutex_lock(&lock);
+    if(mode == SET_CONNECT_STATUS){
+        connect_status = status;
+    }else if(mode == GET_CONNECT_STATUS){
+        status = connect_status;
+        printf("get status = %d\n", connect_status);
+    }
+    pthread_mutex_unlock(&lock);
+
+    return status;
+}
+
 
 //实时数据处理
 #define WRITE_REAL_TIME_MSG 0
@@ -422,16 +464,15 @@ void send_stat_pkg_init()
 }
 
 //return if error happened, or data write over
-static void package_write(int sock, uint8_t *buf, int len)
+static int package_write(int sock, uint8_t *buf, int len)
 {
     int ret = 0;
     int offset = 0;
 
     if(sock < 0 || len < 0 || !buf){
-        return ;
+        return -1;
     } else{
-        while(offset < len)
-        {
+        while(offset < len){
             ret = write(sock, &buf[offset], len-offset);
             if(ret <= 0){
                 //write error deal
@@ -441,15 +482,13 @@ static void package_write(int sock, uint8_t *buf, int len)
                     usleep(10000);
                     continue;
                 }else
-                    return ;
-                    //return -1;
+                    return -1;
             }else{
                 offset += ret;
             }
         }
     }
-    //return offset;
-    return ;
+    return 0;
 }
 static uint8_t sample_calc_sum(SBProtHeader *pHeader, int32_t msg_len)
 {
@@ -803,7 +842,7 @@ int limit_record_time(time_t *last, unsigned int secs)
 	clock_gettime(CLOCK_MONOTONIC, &tv);
     if (tv.tv_sec - (*last) < secs){
         return 0;
-    }
+        }
 
     *last = tv.tv_sec;
     return 1;
@@ -830,7 +869,7 @@ int record_speed()
     }else{
         period = g_configini.record_period;
     }
-    printf("period = %d\n", period);
+    //printf("period = %d\n", period);
 
     if(!limit_record_time(&s_record_last, period)){
        return 0;
@@ -840,13 +879,40 @@ int record_speed()
     can760_message_process(&carinfo, READ_REAL_TIME_MSG);
     tmp.car_speed = carinfo.speed;
     get_timestamp(time_str, sizeof(time_str));
-    printf("[%s] speed: %d km/h", time_str, carinfo.speed);
+    printf("[%s] speed: %d km/h\n", time_str, carinfo.speed);
     snprintf(logbuf, sizeof(logbuf), "[%s] speed: %d km/h", time_str, carinfo.speed);
     data_log(logbuf);
 #endif
     return 0;
 }
 
+
+void tcp_socket_close();
+void check_heart_beat()
+{
+    static time_t s_record_last = 0;
+    static char s_touched = 0;
+
+    //初始化，使得第一次发生 是在超时之后。
+    if(!s_touched){
+        touch_time(&s_record_last);
+        s_touched = 1;
+    }
+
+    if(g_configini.use_heart){
+        //printf("check..%d\n", g_configini.check_heart_period);
+        //周期性检查
+        if(limit_record_time(&s_record_last, g_configini.check_heart_period)){
+            if(heart_beat_process(0, READ_MSG) == HEART_BEAT_DEATH){
+                printf("heart beat death!\n");
+                tcp_socket_close();
+            }else{ //设置心跳关闭，等待激活。
+                printf("set heart beat down!\n");
+                heart_beat_process(HEART_BEAT_DEATH, WRITE_MSG);
+            }
+        }
+    }
+}
 
 void mmid_to_filename(uint32_t id, uint8_t type, char *filepath)
 {
@@ -1345,16 +1411,17 @@ out:
 
 #endif
 
-#if 0
-#else
+
+#define TCP_SEND_TIMEOUT 1
 static int send_package(int sock, uint8_t *buf)
 {
     int rc = 0;
     int len = 0;
     int i = 0;
     struct timespec ts;
-    if(sock < 0){
-        printf("sock error\n");
+
+    if(CONNECT_OFF == process_socket_status(0, GET_CONNECT_STATUS)){
+        printf("write: tcp not connect!\n");
         return -1;
     }
 
@@ -1384,7 +1451,7 @@ static int send_package(int sock, uint8_t *buf)
             //printf("get lock\n");
             pthread_mutex_lock(&recv_ack_mutex);
             clock_gettime(CLOCK_MONOTONIC, &ts);
-            ts.tv_sec += 2;
+            ts.tv_sec += TCP_SEND_TIMEOUT;
             rc = 0;
             while ((recv_ack != NOTICE_MSG) && rc == 0){
                 //printf("cond_wait\n");
@@ -1414,7 +1481,6 @@ static int send_package(int sock, uint8_t *buf)
 out:
     return 0;
 }
-#endif
 
 
 void notice_tcp_send_exit()
@@ -2312,6 +2378,7 @@ static int32_t sample_on_cmd(SBProtHeader *pHeader, int32_t len)
 
         case SAMPLE_CMD_SPEED_INFO: //不需要应答
             write_RealTimeData(pHeader, len);
+            heart_beat_process(HEART_BEAT_ALIVE, WRITE_MSG);
             break;
 
         case SAMPLE_CMD_DEVICE_INFO:
@@ -2379,7 +2446,7 @@ void bond_net_device(int sock)
 	strncpy(interface.ifr_name, inf, IFNAMSIZ);
 	if(setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, (char *)&interface, sizeof(interface)) < 0)
 	{
-		perror("setsockopt error:");
+		perror("bind device error:");
         return;
 	}
 }
@@ -2485,6 +2552,29 @@ void parse_cmd(uint8_t *buf, uint8_t *msgbuf)
     }
 }
 
+int do_recv_msg(int fd, uint8_t *buf, int count, uint8_t *msg)
+{
+    ssize_t r;
+    int i=0;
+
+    r = read(fd, buf, count);
+    if (r < 0) {
+        if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+            return 0;
+        else
+            return -1;
+    } else if (r == 0)
+            return -1;
+
+    while(r--){
+        parse_cmd(&buf[i++], msg);
+    }
+
+    return 0;
+}
+
+
+
 #if 0
 /*******************************************************************/
 /* reads 'count' bytes from a socket  */
@@ -2549,11 +2639,14 @@ Nwrite(int fd, const char *buf, size_t count, int prot)
 }
 #endif
 
-
-
-void pthread_tcp_recv_exit()
+void tcp_socket_close()
 {
-    close(hostsock);
+    printf("try close sock!\n");
+    if(CONNECT_ON == process_socket_status(0, GET_CONNECT_STATUS)){
+        close(hostsock);
+        printf("tcp socket closed!\n");
+        process_socket_status(CONNECT_OFF, SET_CONNECT_STATUS);
+    }
 }
 
 void *pthread_tcp_recv(void *para)
@@ -2563,6 +2656,10 @@ void *pthread_tcp_recv(void *para)
     static int tcprecvcnt = 0;
     uint8_t *readbuf = NULL;
     uint8_t *msgbuf = NULL;
+    fd_set rfds;
+    struct timeval tv;
+    int retval;
+    char logbuf[200];
 
     prctl(PR_SET_NAME, "tcp_process");
     send_stat_pkg_init();
@@ -2586,10 +2683,14 @@ connect_again:
     }
     while (!force_exit) {
         if(try_connect(hostsock)){
+            if(EBADF == errno){
+                goto connect_again;
+            }
             sleep(1);
             printf("try connect!\n");
             continue;
         }else{
+            process_socket_status(CONNECT_ON, SET_CONNECT_STATUS);
             printf("connected!\n");
         }
 #if defined ENABLE_ADAS
@@ -2597,75 +2698,41 @@ connect_again:
 #elif defined ENABLE_DMS
         send_work_status(SAMPLE_DEVICE_ID_DMS);
 #endif
-
-        while(1){
-#if 1
-            ret = read(hostsock, readbuf, TCP_READ_BUF_SIZE);
-            if (ret < 0) {
-                printf("read failed %d %s\n", ret, strerror(errno));
-                if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK){
-                    usleep(10000);
-                    continue;
-                }else{
-                    //break;
-                    goto connect_again;
-                }
-            }else if (ret == 0) {
-                close(hostsock);
-                printf("tcp disconnect! sock = %d\n",hostsock);
-                //hostsock = -1;
-                goto connect_again;
-                //break;
-            }else{//write to buf
-                //MY_DEBUG("recv raw cmd, tcprecvcnt = %d:\n", tcprecvcnt++);
-                //printbuf(readbuf, ret);
-                i=0;
-                while(ret--){
-                    parse_cmd(&readbuf[i++], msgbuf);
-                }
-            }
-#else
-            fd_set rfds;
-            struct timeval tv;
-            int retval;
+        while(!force_exit){
             FD_ZERO(&rfds);
             FD_SET(hostsock, &rfds);
-
             /* Wait up to five seconds. */
+            //printf("set tcp recv timeout %d\n", g_configini.check_heart_period);
+            //tv.tv_sec = g_configini.check_heart_period;
             tv.tv_sec = 1;
             tv.tv_usec = 0;
             retval = select(hostsock+1, &rfds, NULL, NULL, &tv);
-            if (retval == -1 ){
-                if(errno != EINTR){
+            if (retval == -1 && errno != EINTR){ //error
                     perror("select()");
-                    close(hostsock);
-                    hostsock = -1;
+                    tcp_socket_close();
                     goto connect_again;
-                }
-            }else if (retval){
+            }
+            if(retval > 0){
                 if(FD_ISSET(hostsock, &rfds)){
-                    retval = read(hostsock, readbuf, TCP_READ_BUF_SIZE);
-                    if (retval < 0) {
-                        printf("read failed %d %s\n", retval, strerror(errno));
-                        if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK){
-                            usleep(10000);
-                        }else if (retval == 0) {
-                            close(hostsock);
-                            hostsock = -1;
+                    ret = do_recv_msg(hostsock, readbuf, TCP_READ_BUF_SIZE, msgbuf);
+                    if(ret < 0){
+                            perror("recv");
+                            tcp_socket_close();
                             goto connect_again;
-                        }else{
-                            i=0;
-                            while(ret--){
-                                parse_cmd(&readbuf[i++], msgbuf);
-                            }
-                        }
                     }
                 }
-            }else{
-                printf("No data within five seconds.\n");
             }
-
+            if(retval == 0){
+#if 0
+                if(g_configini.use_heart){
+                    printf("tcp recv timeout!\n");
+                    snprintf(logbuf, sizeof(logbuf), "tcp recv timeout %d!, connect again\n", g_configini.check_heart_period);
+                    data_log(logbuf);
+                    tcp_socket_close();
+                    goto connect_again;
+                }
 #endif
+            }
         }
     }
 out:
@@ -2676,7 +2743,7 @@ out:
         free(msgbuf);
 
     if(hostsock>0)
-        close(hostsock);
+        tcp_socket_close();
     pthread_exit(NULL);
 }
 static char get_head = 0;
@@ -2770,8 +2837,9 @@ void *pthread_snap_shot(void *p)
 
     while(!force_exit)
     {
-        printf("snap_pthread...\n");
+        //printf("snap_pthread...\n");
         record_speed();
+        check_heart_beat();
         read_dev_para(&tmp, para_type);
 
         //定时拍照
