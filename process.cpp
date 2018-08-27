@@ -115,6 +115,21 @@ int pull_mm_req_cmd_queue(SBMmHeader2 *mm_info)
 
     return -1;
 }
+
+void clear_queue()
+{
+    ptr_queue_node header;
+    header.buf = NULL;
+    header.len = PTR_QUEUE_BUF_SIZE;
+
+    while(!ptr_queue_pop(g_send_q_p, &header, &ptr_queue_lock)){
+        printf("delete queue item!\n");
+    }
+
+    printf("clear queue!\n");
+
+}
+
 void get_local_time(uint8_t get_time[6])
 {
     struct tm a;
@@ -901,6 +916,13 @@ void check_heart_beat()
 
     if(g_configini.use_heart){
         //printf("check..%d\n", g_configini.check_heart_period);
+
+        //如果当前没有建立链接则不检查。
+        if(CONNECT_OFF == process_socket_status(0, GET_CONNECT_STATUS)){
+            touch_time(&s_record_last);
+            return ;
+        }
+
         //周期性检查
         if(limit_record_time(&s_record_last, g_configini.check_heart_period)){
             if(heart_beat_process(0, READ_MSG) == HEART_BEAT_DEATH){
@@ -2522,6 +2544,7 @@ int try_connect(int sock)
         return -1;
     }
     bond_net_device(sock);
+    printf("try connect!\n");
     ret = connect(sock, (struct sockaddr *)&host_serv_addr, sizeof(host_serv_addr));
     if(ret){
         perror("connect:");
@@ -2649,6 +2672,12 @@ void tcp_socket_close()
     }
 }
 
+
+void connect_init()
+{
+    g_pkg_status_p->mm_data_trans_waiting = 0;
+}
+
 void *pthread_tcp_recv(void *para)
 {
     int32_t ret = 0;
@@ -2679,6 +2708,7 @@ void *pthread_tcp_recv(void *para)
 connect_again:
     hostsock = socket_init();
     if(hostsock < 0){
+        printf("socket iniit error!\n");
         goto out;
     }
     while (!force_exit) {
@@ -2687,9 +2717,10 @@ connect_again:
                 goto connect_again;
             }
             sleep(1);
-            printf("try connect!\n");
             continue;
         }else{
+            clear_queue();
+            connect_init();
             process_socket_status(CONNECT_ON, SET_CONNECT_STATUS);
             printf("connected!\n");
         }
