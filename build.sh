@@ -43,3 +43,11 @@ echo "generate target $outputpath"
 echo "cp $buildtarget $outputpath$target_dist"
 cp $buildtarget $outputpath$target_dist
 
+strip=/home/xiao/bin/ndk/android-ndk-r11c/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-strip
+stripdir="strip_target/"
+echo "mkdir $outputpath$stripdir"
+mkdir -p $outputpath$stripdir
+cp $buildtarget $outputpath$stripdir$target_dist
+echo "strip..."
+$strip $outputpath$stripdir$target_dist
+
