@@ -2455,6 +2455,11 @@ static int32_t sample_on_cmd(SBProtHeader *pHeader, int32_t len)
     return 0;
 }
 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+
+
 #include <arpa/inet.h>
 #include <linux/if_arp.h>
 void bond_net_device(int sock)
@@ -2471,6 +2476,37 @@ void bond_net_device(int sock)
 		perror("bind device error:");
         return;
 	}
+}
+int socketkeepalive(int sockfd)
+{
+    int keepAlive=1;//开启keepalive属性
+    int keepIdle=90;//在此时间没有数据则进行探测。
+    int keepInterval=2;//探测时发包的时间间隔为2秒
+    int keepCount=3;//探测尝试的次数。如果第1次探测包就收到响应了，则后2次的不再发送
+    if(setsockopt(sockfd,SOL_SOCKET,SO_KEEPALIVE,(void *)&keepAlive,sizeof(keepAlive))!=0){
+		perror("set TCP_KEEPALIVE error:");
+        return -1;
+    }
+    keepAlive=0;
+    socklen_t len=0;
+    if(getsockopt(sockfd,SOL_SOCKET,SO_KEEPALIVE,(void *)&keepAlive,&len)!=0){
+		perror("set TCP_KEEPALIVE error:");
+        return -1;
+    }
+    printf("get keepAlive = %d\n", keepAlive);
+    if(setsockopt(sockfd,SOL_TCP,TCP_KEEPIDLE,(void *)&keepIdle,sizeof(keepIdle))!=0){
+		perror("set TCP_KEEPIDLE error:");
+        return -1;
+    }
+    if(setsockopt(sockfd,SOL_TCP,TCP_KEEPINTVL,(void *)&keepInterval,sizeof(keepInterval))!=0){
+		perror("set TCP_KEEPINTVAL error:");
+        return -1;
+    }
+    if(setsockopt(sockfd,SOL_TCP,TCP_KEEPCNT,(void *)&keepCount,sizeof(keepCount))!=0){
+		perror("set TCP_KEEPCNT error:");
+        return -1;
+    }
+    return 0;
 }
 
 static int socket_init()
@@ -2523,6 +2559,9 @@ static int socket_init()
     getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &bufsize, &optlen);
     printf("get send buf size = %d\n", bufsize);
     
+    bond_net_device(sock);
+    //socketkeepalive(sock);
+
     return sock;
 }
 
@@ -2543,7 +2582,6 @@ int try_connect(int sock)
         printf("inet_aton failed %d %s\n", ret, strerror(errno));
         return -1;
     }
-    bond_net_device(sock);
     printf("try connect!\n");
     ret = connect(sock, (struct sockaddr *)&host_serv_addr, sizeof(host_serv_addr));
     if(ret){
