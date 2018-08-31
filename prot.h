@@ -9,6 +9,11 @@
 
 
 
+#define HARDWARE_VERSION    "1.0.0.1"
+#define SOFTWARE_VERSION    "1.1.0.0"
+
+
+
 //#define SAVE_MEDIA_NUM_MAX 100
 #define SAVE_MEDIA_NUM_MAX 2000
 #define SAVE_ANOTHER_CAMERA_VIDEO
@@ -592,6 +597,8 @@ typedef struct __WsiFrame{
 
 /*********************local config file****************************/
 typedef struct __LocalConfig {
+    
+    char usingParaFile;
 
     char serverip[32];
     uint16_t serverport;

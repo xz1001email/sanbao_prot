@@ -246,8 +246,13 @@ int record_run_time()
     #define PROT_LOG_NAME "/data/dmsprot.log"
 #endif
 
+
+
+extern LocalConfig g_configini;
 int global_var_init()
 {
+    memset(&g_configini, 0, sizeof(g_configini));
+
     sem_send_init();
 #if defined ENABLE_ADAS
     printf("adas device enter!\n");
@@ -336,7 +341,7 @@ int process_socket_status(char status, int mode)
         connect_status = status;
     }else if(mode == GET_CONNECT_STATUS){
         status = connect_status;
-        printf("get status = %d\n", connect_status);
+        //printf("get status = %d\n", connect_status);
     }
     pthread_mutex_unlock(&lock);
 
@@ -2362,8 +2367,8 @@ static int32_t sample_on_cmd(SBProtHeader *pHeader, int32_t len)
     M4DevInfo dev_info = {
         15, "MINIEYE",
         15, "M4",
-        15, "1.0.0.1",
-        15, "1.1.0.0", //soft version
+        15, HARDWARE_VERSION,
+        15, SOFTWARE_VERSION, //soft version
         15, "0xF0321564",
         15, "SAMPLE",
     };

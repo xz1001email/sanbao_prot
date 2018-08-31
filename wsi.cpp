@@ -925,7 +925,6 @@ void can_send_init(void)
 }
 
 
-#define GETOPT_OPT_STR  "hvV::C:"
 static void usage(const char *exe_name)
 {
     printf("Usage:%s <switches> [option]\n", exe_name);
@@ -933,6 +932,7 @@ static void usage(const char *exe_name)
 
     printf("#Existing collector switches:\n");
     printf("%-10s %s\n", "-h", "Show this help message");
+    printf("%-10s %s\n", "-f", "using para file");
     printf("%-10s %s\n", "-v", "Show program version");
     printf("%-10s %s\n", "-V <level>", "Set program verbose level");
 
@@ -959,12 +959,14 @@ void set_local_config_default(LocalConfig *config)
     config->record_period = 30;
 
     config->use_heart = 1;
-    config->check_heart_period = 300;
+    config->check_heart_period = 180;
 }
 
 void local_config_dump(LocalConfig *config)
 {
     printf("***********Local config dump****************\n");
+    printf("usingParaFile: %d\n", config->usingParaFile);
+
     printf("serverip: %s\n", config->serverip);
     printf("serverport: %d\n", config->serverport);
     printf("clientip: %s\n", config->clientip);
@@ -1125,29 +1127,28 @@ static int parse_prot_json(char *buffer, LocalConfig *config)
     return 0;
 }
 
-int local_config_init()
+int local_config_init(char *filename)
 {
-#define CONFIG_INI_NAME "prot.json"
     char buffer[1024];
     size_t size = 0;
     size_t ret = 0;
     FILE *fp;
 
-    set_local_config_default(&g_configini);
-
-    fp = fopen(CONFIG_INI_NAME, "r");
+    printf("using para file init\n");
+    fp = fopen(filename, "r");
     if(!fp){
-        fprintf(stdout, "open %s fail, error:%s. using configini default!\n",\
-                CONFIG_INI_NAME, strerror(errno));
+        fprintf(stderr, "open %s fail, error:%s!\n",\
+                filename, strerror(errno));
+        return -1;
     }else{
         rewind(fp);
         fseek(fp, 0, SEEK_END);
         size = ftell(fp);
         rewind(fp);
         ret = fread(buffer, 1, size, fp);
-        printf("read %s, len = %ld\n",CONFIG_INI_NAME, ret);
+        printf("read %s, len = %ld\n", filename, ret);
         buffer[ret] = 0;
-        printf("%s\n", buffer);
+        //printf("%s\n", buffer);
         fclose(fp);
         if(ret != size){
             printf("read file not complete\n");
@@ -1157,20 +1158,25 @@ int local_config_init()
             return -1;
         }
     }
-    local_config_dump(&g_configini);
     return 0;
 }
 
 
-#define VERSION "version 1.0.0"
+#define GETOPT_OPT_STR  "hvf:V:"
 int main(int argc, char **argv)
 {
     pthread_t pth[10];
     int i =0;
     int opt;
 
-    printf("compile time %s %s\n", __DATE__, __TIME__);
-#if 1
+    printf("---compile time %s %s---\n", __DATE__, __TIME__);
+
+    signal(SIGINT, sighandler);
+    if(global_var_init()){
+        printf("init fail\n");
+        exit(0);
+    }
+
     while ((opt = getopt(argc, (char * const *)argv, GETOPT_OPT_STR)) != -1) {
         switch(opt) {
             default:
@@ -1180,29 +1186,33 @@ int main(int argc, char **argv)
                 break;
             case 'V':
                 if (!optarg) {
-                    //param.verbose = 5;
+                    printf("using default verbose = %d\n", atoi(optarg));
                 } else {
-                    //verbose = atoi(optarg);
                     printf("verbose = %d\n", atoi(optarg));
                 }
                 break;
+            case 'f':
+                if (!optarg) {
+                    printf("input para file!\n");
+                } else {
+                    printf("parse filename: %s\n", optarg);
+                    if(local_config_init(optarg)){
+                        exit(0);
+                    }
+                    g_configini.usingParaFile = 1;
+                }
+                break;
             case 'v':
-                printf(VERSION "\n");
+                printf(SOFTWARE_VERSION"\n");
                 break;
         }
     }
 
-    printf("local config init\n");
-    if(local_config_init()){
-        exit(0);
+    if(!g_configini.usingParaFile){
+        printf("Using default configini.\n");
+        set_local_config_default(&g_configini);
     }
-#endif
-
-    signal(SIGINT, sighandler);
-    if(global_var_init()){
-        printf("init fail\n");
-        exit(0);
-    }
+    local_config_dump(&g_configini);
 
     //can_send_init();
     if(pthread_create(&pth[0], NULL, pthread_websocket_client, NULL)){
@@ -1213,16 +1223,13 @@ int main(int argc, char **argv)
         printf("pthread_create fail!\n");
         return -1;
     }
+    pthread_detach(pth[1]);
+
+
     if(pthread_create(&pth[2], NULL, pthread_tcp_send, NULL)){
         printf("pthread_create fail!\n");
         return -1;
     }
-#if 0
-    if(pthread_create(&pth[3], NULL, pthread_encode_jpeg, NULL)){
-        printf("pthread_create fail!\n");
-        return -1;
-    }
-#endif
     if(pthread_create(&pth[4], NULL, pthread_save_media, NULL)){
         printf("pthread_create fail!\n");
         return -1;
@@ -1233,14 +1240,10 @@ int main(int argc, char **argv)
     }
     pthread_join(pth[0], NULL);
     printf("join %d\n", i++);
-    pthread_join(pth[1], NULL);
-    printf("join %d\n", i++);
+    //pthread_join(pth[1], NULL);
+    //printf("join %d\n", i++);
     pthread_join(pth[2], NULL);
     printf("join %d\n", i++);
-#if 0
-    pthread_join(pth[3], NULL);
-    printf("join %d\n", i++);
-#endif
     pthread_join(pth[4], NULL);
     printf("join %d\n", i++);
     pthread_join(pth[5], NULL);
