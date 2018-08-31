@@ -433,6 +433,45 @@ void write_one_jpeg(InfoForStore *mm, RBFrame* pFrame, int index)
 #endif
 }
 
+//pthread_mutex_unlock(lock);
+//pthread_mutex_lock(lock);
+//pthread_mutex_t photo_queue_lock = PTHREAD_MUTEX_INITIALIZER;
+uint32_t store_jpegs(CRingBuf* pRB, InfoForStore mm)
+{
+    RBFrame* pFrame = nullptr;
+    int jpeg_index = 0;
+    uint32_t interval= 0; //usleep
+    uint32_t take_time = 0;
+    int64_t old_pts = 0;
+    
+    printf("%s enter!\n", __FUNCTION__);
+    if(!mm.photo_enable){
+        return take_time;
+    }
+    interval = mm.photo_time_period*100*1000; //单位是100ms
+    printf("interval time = %d\n", interval);
+    do{
+        pRB->SeekIndexByTime(0);
+        pFrame = request_jpeg_frame(pRB, 0);
+        if(pFrame == nullptr)
+            continue;
+
+        //pts 单位是us
+        if(pFrame->pts >(old_pts + interval)){
+            print_frame("jpeg", pFrame);
+            write_one_jpeg(&mm, pFrame, jpeg_index++);
+            pRB->CommitRead();
+            old_pts = pFrame->pts;
+        }else{
+            usleep(100000);
+        }
+
+    }while(jpeg_index < mm.photo_num);
+    take_time = interval * (mm.photo_num -1);
+
+    return take_time;
+}
+
 uint32_t store_jpeg(CRingBuf* pRB, InfoForStore *mm)
 {
     RBFrame* pFrame = nullptr;
@@ -853,10 +892,12 @@ int dms_alert_type_to_index(int type)
         case DMS_ABNORMAL_WARN:
             index = 4;
             break;
+        case DMS_DRIVER_CHANGE:
         case DMS_SANPSHOT_EVENT:
             index = 5;
             break;
         default:
+            printf("dms alert type invalid!\n");
             index = 0;
             break;
     
@@ -880,6 +921,7 @@ int adas_alert_type_to_index(int type)
             index = 3;
             break;
         default:
+            printf("adas alert type invalid!\n");
             index = 0;
             break;
     }
@@ -989,7 +1031,7 @@ void *pthread_save_media(void *p)
             user_index = adas_alert_type_to_index(mm.warn_type);
             printf("adas warn num = %d, user index = %d\n", mm.warn_type, user_index);
             if(user_index == SB_WARN_TYPE_SNAP){
-                store_jpeg(prb[user_index], &mm);
+                store_jpegs(prb[user_index], mm);
             }else{
                 cls[task_index] = NewClosure(record_mm_info, prb[user_index], adas_video_user[user_index], ADAS_CAMERA, mm);
             }
@@ -1008,7 +1050,7 @@ void *pthread_save_media(void *p)
             user_index = dms_alert_type_to_index(mm.warn_type);
             printf("dms warn num = %d, user index = %d\n", mm.warn_type, user_index);
             if(user_index == DMS_SANPSHOT_EVENT){
-                store_jpeg(prb[user_index], &mm);
+                store_jpegs(prb[user_index], mm);
             }else{
                 cls[task_index] = NewClosure(record_mm_info, prb[user_index], dms_video_user[user_index], DMS_CAMERA, mm);
             }

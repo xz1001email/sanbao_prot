@@ -388,6 +388,8 @@ typedef struct __DmsAlertInfo {
     uint8_t alert_look_around:2;
     /* 打哈欠 */
     uint8_t alert_yawn:2;
+
+
     /* 打电话 */
     uint8_t alert_phone:2;
     /* 吸烟 */
@@ -397,7 +399,10 @@ typedef struct __DmsAlertInfo {
     /* 低头 */
     uint8_t alert_bow:2;
 
-    uint8_t byte2_recv;
+    /* 驾驶员变更 */
+    uint8_t alert_faceId:2;
+    uint8_t byte2_recv:6;
+
     uint8_t byte3_recv;
     uint8_t byte4_recv;
     uint8_t byte5_recv;

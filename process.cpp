@@ -782,8 +782,6 @@ void get_dms_Info_for_store(uint8_t type, InfoForStore *mm_store)
 
 
         case DMS_DRIVER_CHANGE:
-            break;
-
         case DMS_SANPSHOT_EVENT:
             mm_store->photo_num = para.photo_num;
             mm_store->photo_time_period = para.photo_time_period;
@@ -1227,8 +1225,6 @@ int build_dms_warn_frame(int type, uint8_t status_flag, DsmWarnFrame *uploadmsg)
             break;
 
         case DMS_DRIVER_CHANGE:
-            break;
-
         case DMS_SANPSHOT_EVENT:
             if(mm.photo_enable){
                 mm.warn_type = type;
@@ -1266,10 +1262,11 @@ void deal_wsi_dms_info(WsiFrame *can)
     static time_t dms_calling_warn = 0;
     static time_t dms_smoking_warn = 0;
     static time_t dms_abnormal_warn = 0;
+    static time_t dms_driver_change = 0;
 
     static uint8_t dms_alert_last[8] = {0,0,0,0,0,0,0,0};
     uint8_t dms_alert[8] = {0,0,0,0,0,0,0,0};
-    uint8_t dms_alert_mask[8] = {0xFF,0xFF,0,0,0,0,0,0};
+    uint8_t dms_alert_mask[8] = {0xFF,0xFF,0xC0,0,0,0,0,0};
 
     SBProtHeader *pSend = (SBProtHeader *) txbuf;
     DsmWarnFrame *uploadmsg = (DsmWarnFrame *)&msgbuf[0];
@@ -1311,7 +1308,6 @@ void deal_wsi_dms_info(WsiFrame *can)
             (cur->alert_eye_close2 && !last->alert_eye_close2) ||\
             (cur->alert_yawn && !last->alert_yawn)){
 
-
         alert_type = DMS_FATIGUE_WARN;
         if(filter_alert_by_time(&dms_fatigue_warn, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
@@ -1344,6 +1340,14 @@ void deal_wsi_dms_info(WsiFrame *can)
     if(cur->alert_absence && !last->alert_absence){
         alert_type = DMS_ABNORMAL_WARN;
         if(filter_alert_by_time(&dms_abnormal_warn, FILTER_DMS_ALERT_SET_TIME)){
+            playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
+            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+        }
+    }
+    //add faceId
+    if(cur->alert_faceId && !last->alert_faceId){
+        alert_type = DMS_DRIVER_CHANGE;
+        if(filter_alert_by_time(&dms_driver_change, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
