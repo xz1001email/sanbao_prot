@@ -1674,9 +1674,11 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
             return 0;
         }
 
+#if 0
         //filter alert
         if(!filter_alert_by_speed())
             goto out;
+#endif
 
         //LDW and FCW event
         if (0 != memcmp(trigger_data, &g_last_trigger_warning, sizeof(g_last_trigger_warning)) && 0 != trigger_data[4]) {
@@ -1685,6 +1687,8 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                 if(!filter_alert_by_time(&ldw_alert, FILTER_ADAS_ALERT_SET_TIME)){
                     printf("ldw filter alert by time!\n");
                 }else{
+                    if(!filter_alert_by_speed())
+                        goto out;
                     memset(uploadmsg, 0, sizeof(*uploadmsg));
                     playloadlen = build_adas_warn_frame(SB_WARN_TYPE_LDW,SB_WARN_STATUS_NONE, uploadmsg);
 
@@ -1704,6 +1708,8 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                 if(!filter_alert_by_time(&fcw_alert, FILTER_ADAS_ALERT_SET_TIME)){
                     printf("ldw filter alert by time!\n");
                 }else{
+                    if(!filter_alert_by_speed())
+                        goto out;
                     playloadlen = build_adas_warn_frame(SB_WARN_TYPE_FCW,SB_WARN_STATUS_NONE, uploadmsg);
                     uploadmsg->sound_type = SB_WARN_TYPE_FCW;
 
@@ -1741,7 +1747,8 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                 if(!filter_alert_by_time(&hw_alert, FILTER_ADAS_ALERT_SET_TIME)){
                     printf("hw filter alert by time!\n");
                 }else{
-
+                    if(!filter_alert_by_speed())
+                        goto out;
                     playloadlen = build_adas_warn_frame(SB_WARN_TYPE_HW, SB_WARN_STATUS_BEGIN, uploadmsg);
                     WSI_DEBUG("send HW alert start message!\n");
                     message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
@@ -1757,6 +1764,11 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
 
             } else if (HW_LEVEL_RED_CAR == \
                     g_last_warning_data.headway_warning_level && s_start_flag) {
+#if 0
+                hw 结束不进行过滤
+                    if(!filter_alert_by_speed())
+                        goto out;
+#endif
                 playloadlen = build_adas_warn_frame(SB_WARN_TYPE_HW, SB_WARN_STATUS_END, uploadmsg);
                 WSI_DEBUG("send HW alert end message!\n");
                 message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
