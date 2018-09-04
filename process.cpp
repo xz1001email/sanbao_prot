@@ -31,6 +31,9 @@
 #include <queue>
 using namespace std;
 
+
+char *adas_alert_type_to_str(uint8_t type);
+
 static int32_t sample_send_image(uint8_t devid);
 
 extern volatile int force_exit;
@@ -1007,7 +1010,7 @@ void record_alert_log(uint8_t time[6], int type, uint8_t flag)
             time[3],\
             time[4],\
             time[5],\
-            warning_type_to_str(type),
+            adas_alert_type_to_str(type),
             status[flag]); 
     data_log(logbuf);
 }
@@ -1132,7 +1135,7 @@ out:
     return (sizeof(*uploadmsg) + uploadmsg->mm_num*sizeof(SBMmHeader));
 }
 
-char *dms_warning_type_to_str(uint8_t type);
+char *dms_alert_type_to_str(uint8_t type);
 
 /*********************************
 * func: build dms warning package
@@ -1145,7 +1148,7 @@ int build_dms_warn_frame(int type, uint8_t status_flag, DsmWarnFrame *uploadmsg)
     DmsParaSetting para;
     RealTimeData tmp;
 
-    printf("%s alert happened!\n", warning_type_to_str(type));
+    printf("%s alert happened!\n", adas_alert_type_to_str(type));
 
     read_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
     memset(&mm, 0, sizeof(mm));
@@ -1266,7 +1269,7 @@ void deal_wsi_dms_info(WsiFrame *can)
 
     static uint8_t dms_alert_last[8] = {0,0,0,0,0,0,0,0};
     uint8_t dms_alert[8] = {0,0,0,0,0,0,0,0};
-    uint8_t dms_alert_mask[8] = {0xFF,0xFF,0xC0,0,0,0,0,0};
+    uint8_t dms_alert_mask[8] = {0xFF,0xFF,0x03,0,0,0,0,0};
 
     SBProtHeader *pSend = (SBProtHeader *) txbuf;
     DsmWarnFrame *uploadmsg = (DsmWarnFrame *)&msgbuf[0];
@@ -1277,6 +1280,9 @@ void deal_wsi_dms_info(WsiFrame *can)
     printf("topic: %s\n", can->topic);
     printbuf(can->warning, sizeof(can->warning));
 #endif
+    
+    //set phone alert as faceid, to test faceid
+    can->warning[2] = can->warning[1];
 
     for(i=0; i<sizeof(can->warning); i++){
         dms_alert[i] = can->warning[i] & dms_alert_mask[i];
@@ -1300,15 +1306,15 @@ void deal_wsi_dms_info(WsiFrame *can)
     printf("cur->alert_bow %d\n", cur->alert_bow);
 #endif
 
-    if(!filter_alert_by_speed())
-        goto out;
-
     //按照优先级检查
     if((cur->alert_eye_close1 && !last->alert_eye_close1) ||\
             (cur->alert_eye_close2 && !last->alert_eye_close2) ||\
             (cur->alert_yawn && !last->alert_yawn)){
-
         alert_type = DMS_FATIGUE_WARN;
+        if(!filter_alert_by_speed()){
+            printf("speed filter: %s\n", dms_alert_type_to_str(alert_type));
+            goto out;
+        }
         if(filter_alert_by_time(&dms_fatigue_warn, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
@@ -1316,8 +1322,11 @@ void deal_wsi_dms_info(WsiFrame *can)
     }
     if ((cur->alert_look_around && !last->alert_look_around) ||\
             (cur->alert_bow && !last->alert_bow)){ //低头作为分神报警
-
         alert_type = DMS_DISTRACT_WARN;
+        if(!filter_alert_by_speed()){
+            printf("speed filter: %s\n", dms_alert_type_to_str(alert_type));
+            goto out;
+        }
         if(filter_alert_by_time(&dms_distract_warn, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
@@ -1325,6 +1334,10 @@ void deal_wsi_dms_info(WsiFrame *can)
     }
     if(cur->alert_phone && !last->alert_phone){
         alert_type = DMS_CALLING_WARN;
+        if(!filter_alert_by_speed()){
+            printf("speed filter: %s\n", dms_alert_type_to_str(alert_type));
+            goto out;
+        }
         if(filter_alert_by_time(&dms_calling_warn, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
@@ -1332,6 +1345,10 @@ void deal_wsi_dms_info(WsiFrame *can)
     }
     if(cur->alert_smoking && !last->alert_smoking){
         alert_type = DMS_SMOKING_WARN;
+        if(!filter_alert_by_speed()){
+            printf("speed filter: %s\n", dms_alert_type_to_str(alert_type));
+            goto out;
+        }
         if(filter_alert_by_time(&dms_smoking_warn, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
@@ -1339,6 +1356,10 @@ void deal_wsi_dms_info(WsiFrame *can)
     }
     if(cur->alert_absence && !last->alert_absence){
         alert_type = DMS_ABNORMAL_WARN;
+        if(!filter_alert_by_speed()){
+            printf("speed filter: %s\n", dms_alert_type_to_str(alert_type));
+            goto out;
+        }
         if(filter_alert_by_time(&dms_abnormal_warn, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
@@ -1347,6 +1368,10 @@ void deal_wsi_dms_info(WsiFrame *can)
     //add faceId
     if(cur->alert_faceId && !last->alert_faceId){
         alert_type = DMS_DRIVER_CHANGE;
+        if(!filter_alert_by_speed()){
+            printf("speed filter: %s\n", dms_alert_type_to_str(alert_type));
+            goto out;
+        }
         if(filter_alert_by_time(&dms_driver_change, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
@@ -1674,12 +1699,6 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
             return 0;
         }
 
-#if 0
-        //filter alert
-        if(!filter_alert_by_speed())
-            goto out;
-#endif
-
         //LDW and FCW event
         if (0 != memcmp(trigger_data, &g_last_trigger_warning, sizeof(g_last_trigger_warning)) && 0 != trigger_data[4]) {
             if (can.left_ldw || can.right_ldw) {
@@ -1687,8 +1706,11 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                 if(!filter_alert_by_time(&ldw_alert, FILTER_ADAS_ALERT_SET_TIME)){
                     printf("ldw filter alert by time!\n");
                 }else{
-                    if(!filter_alert_by_speed())
+                    if(!filter_alert_by_speed()){
+                        printf("speed filter: %s\n", adas_alert_type_to_str(SB_WARN_TYPE_LDW));
                         goto out;
+                    }
+
                     memset(uploadmsg, 0, sizeof(*uploadmsg));
                     playloadlen = build_adas_warn_frame(SB_WARN_TYPE_LDW,SB_WARN_STATUS_NONE, uploadmsg);
 
@@ -1708,9 +1730,12 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                 if(!filter_alert_by_time(&fcw_alert, FILTER_ADAS_ALERT_SET_TIME)){
                     printf("ldw filter alert by time!\n");
                 }else{
-                    if(!filter_alert_by_speed())
+                    if(!filter_alert_by_speed()){
+                        printf("speed filter: %s\n", adas_alert_type_to_str(SB_WARN_TYPE_FCW));
                         goto out;
-                    playloadlen = build_adas_warn_frame(SB_WARN_TYPE_FCW,SB_WARN_STATUS_NONE, uploadmsg);
+                    }
+
+                    playloadlen = build_adas_warn_frame(SB_WARN_TYPE_FCW, SB_WARN_STATUS_NONE, uploadmsg);
                     uploadmsg->sound_type = SB_WARN_TYPE_FCW;
 
                     WSI_DEBUG("send FCW alert message!\n");
@@ -1741,14 +1766,16 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
             }
 #else
 
-
             if (HW_LEVEL_RED_CAR == can.headway_warning_level) {
                 //要和上一次结束的时间比较
                 if(!filter_alert_by_time(&hw_alert, FILTER_ADAS_ALERT_SET_TIME)){
                     printf("hw filter alert by time!\n");
                 }else{
-                    if(!filter_alert_by_speed())
+                    if(!filter_alert_by_speed()){
+                        printf("speed filter: %s\n", adas_alert_type_to_str(SB_WARN_TYPE_HW));
                         goto out;
+                    }
+
                     playloadlen = build_adas_warn_frame(SB_WARN_TYPE_HW, SB_WARN_STATUS_BEGIN, uploadmsg);
                     WSI_DEBUG("send HW alert start message!\n");
                     message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
@@ -2970,7 +2997,7 @@ void *pthread_snap_shot(void *p)
 }
 
 
-char *dms_warning_type_to_str(uint8_t type)
+char *dms_alert_type_to_str(uint8_t type)
 {
     static char s_name[20];
     strcpy(s_name, "default");
@@ -3005,7 +3032,7 @@ char *dms_warning_type_to_str(uint8_t type)
 #define TSRW_NAME           "TSRW"
 #define TSR_NAME            "TSR"
 #define SNAP_NAME           "SNAP"
-char *warning_type_to_str(uint8_t type)
+char *adas_alert_type_to_str(uint8_t type)
 {
     static char s_name[20];
     strcpy(s_name, "default");

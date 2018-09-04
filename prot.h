@@ -380,6 +380,8 @@ typedef struct __DmsAlertInfo {
 #if 0
 #else /*Little Endian*/
 
+    //短时间闭眼报警 在字节的第两位。
+
     /* 短时间闭眼报警 */
     uint8_t alert_eye_close1:2;
     /* 长时间闭眼报警 */
