@@ -28,11 +28,16 @@
 #include "common.h"
 #include <stdbool.h>
 
+
+#include "net.h"
+
 #include <queue>
 using namespace std;
 
 
-char *adas_alert_type_to_str(uint8_t type);
+int GetFileSize(char *filename);
+const char *dms_alert_type_to_str(uint8_t type);
+const char *adas_alert_type_to_str(uint8_t type);
 
 static int32_t sample_send_image(uint8_t devid);
 
@@ -70,7 +75,6 @@ void push_mm_queue(InfoForStore *mm)
     header.len = 0;
 
     memcpy(&header.mm, mm, sizeof(*mm));
-
     ptr_queue_push(g_image_queue_p, &header, &photo_queue_lock);
 }
 
@@ -81,16 +85,14 @@ int pull_mm_queue(InfoForStore *mm)
     header.buf = NULL;
     header.len = 0;
 
-
-    if(!ptr_queue_pop(g_image_queue_p, &header, &photo_queue_lock))
-    {
+    if(!ptr_queue_pop(g_image_queue_p, &header, &photo_queue_lock)){
         memcpy(mm, &header.mm, sizeof(*mm));
         return 0;
     }
 
     return -1;
 }
-
+#if 0
 //store req mm cmd
 void push_mm_req_cmd_queue(SBMmHeader2 *mm_info)
 {
@@ -118,6 +120,7 @@ int pull_mm_req_cmd_queue(SBMmHeader2 *mm_info)
 
     return -1;
 }
+#endif
 
 void clear_queue()
 {
@@ -128,9 +131,7 @@ void clear_queue()
     while(!ptr_queue_pop(g_send_q_p, &header, &ptr_queue_lock)){
         printf("delete queue item!\n");
     }
-
     printf("clear queue!\n");
-
 }
 
 void get_local_time(uint8_t get_time[6])
@@ -250,7 +251,6 @@ int record_run_time()
 #endif
 
 
-
 extern LocalConfig g_configini;
 int global_var_init()
 {
@@ -280,13 +280,11 @@ int recv_ack = WAIT_MSG;
 pthread_mutex_t  recv_ack_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t   recv_ack_cond = PTHREAD_COND_INITIALIZER;
 
+#if 0
 int save_mp4 = 0;
 pthread_mutex_t  save_mp4_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t   save_mp4_cond = PTHREAD_COND_INITIALIZER;
-
-int GetFileSize(char *filename);
-
-
+#endif
 
 int setcondattr(pthread_cond_t *i_cv)
 {
@@ -329,7 +327,6 @@ char heart_beat_process(char status, int mode)
     return status;
 }
 
-
 #define SET_CONNECT_STATUS 0
 #define GET_CONNECT_STATUS 1
 #define CONNECT_ON 1
@@ -351,7 +348,6 @@ int process_socket_status(char status, int mode)
     return status;
 }
 
-
 //实时数据处理
 #define WRITE_REAL_TIME_MSG 0
 #define READ_REAL_TIME_MSG  1
@@ -361,12 +357,9 @@ void RealTimeDdata_process(RealTimeData *data, int mode)
     static pthread_mutex_t real_time_msg_lock = PTHREAD_MUTEX_INITIALIZER;
 
     pthread_mutex_lock(&real_time_msg_lock);
-    if(mode == WRITE_REAL_TIME_MSG)
-    {
+    if(mode == WRITE_REAL_TIME_MSG){
         memcpy(&msg, data, sizeof(RealTimeData));
-    }
-    else if(mode == READ_REAL_TIME_MSG)
-    {
+    }else if(mode == READ_REAL_TIME_MSG){
         memcpy(data, &msg, sizeof(RealTimeData));
     }
     pthread_mutex_unlock(&real_time_msg_lock);
@@ -374,19 +367,15 @@ void RealTimeDdata_process(RealTimeData *data, int mode)
     //printf("get car speed: %d\n", data->car_speed);
 }
 
-
 void can760_message_process(CAN760Info *data, int mode)
 {
     static CAN760Info msg;
     static pthread_mutex_t can760_lock = PTHREAD_MUTEX_INITIALIZER;
 
     pthread_mutex_lock(&can760_lock);
-    if(mode == WRITE_REAL_TIME_MSG)
-    {
+    if(mode == WRITE_REAL_TIME_MSG){
         memcpy(&msg, data, sizeof(CAN760Info));
-    }
-    else if(mode == READ_REAL_TIME_MSG)
-    {
+    }else if(mode == READ_REAL_TIME_MSG){
         memcpy(data, &msg, sizeof(CAN760Info));
     }
     pthread_mutex_unlock(&can760_lock);
@@ -403,7 +392,6 @@ void get_latitude_info(char *buffer, int len)
             (MY_HTONL(tmp.latitude)*1.0)/1000000, (MY_HTONL(tmp.longitude)*1.0)/1000000);
 
     //printf("latitude: %s\n", buffer);
-
 }
 
 #define WARNING_ID_MODE 0
@@ -418,21 +406,15 @@ uint32_t get_next_id(int mode, uint32_t *id, uint32_t num)
     uint32_t i;
 
     pthread_mutex_lock(&id_lock);
-    if(mode == WARNING_ID_MODE)
-    {
+    if(mode == WARNING_ID_MODE){
         s_warning_id ++;
         warn_id = s_warning_id;
-    }
-    else if(mode == MM_ID_MODE)
-    {
-        for(i=0; i<num; i++)
-        {
+    }else if(mode == MM_ID_MODE){
+        for(i=0; i<num; i++){
             s_mm_id ++;
             id[i] = s_mm_id;
         }
-    }
-    else
-    {
+    }else{
         warn_id = 0;
     }
     pthread_mutex_unlock(&id_lock);
@@ -448,35 +430,26 @@ void do_serial_num(uint16_t *num, int mode)
     static pthread_mutex_t serial_num_lock = PTHREAD_MUTEX_INITIALIZER;
 
     pthread_mutex_lock(&serial_num_lock);
-    if(mode == GET_NEXT_SEND_NUM)
-    {
-        if(send_serial_num == 0xFF)
+    if(mode == GET_NEXT_SEND_NUM){
+        if(send_serial_num == 0xFF){
             send_serial_num = 0;
-        else
-        {
+        }else{
             send_serial_num ++;
             *num = send_serial_num;
         }
     }
     //记录接收到的序列号，发送序列号在此基础上累加 
-    else if(mode == RECORD_RECV_NUM)
-    {
+    else if(mode == RECORD_RECV_NUM){
         recv_serial_num = *num;
-        if(*num > send_serial_num)
-        {
+        if(*num > send_serial_num){
             send_serial_num = *num;
         }
-    }
-    else if(mode == GET_RECV_NUM)
-    {
+    }else if(mode == GET_RECV_NUM){
         *num = recv_serial_num; 
-    }
-    else
-    {
+    }else{
     }
     pthread_mutex_unlock(&serial_num_lock);
 }
-
 
 pkg_repeat_status g_pkg_status;
 pkg_repeat_status *g_pkg_status_p = &g_pkg_status;
@@ -486,33 +459,6 @@ void send_stat_pkg_init()
     memset(g_pkg_status_p, 0, sizeof(pkg_repeat_status));
 }
 
-//return if error happened, or data write over
-static int package_write(int sock, uint8_t *buf, int len)
-{
-    int ret = 0;
-    int offset = 0;
-
-    if(sock < 0 || len < 0 || !buf){
-        return -1;
-    } else{
-        while(offset < len){
-            ret = write(sock, &buf[offset], len-offset);
-            if(ret <= 0){
-                //write error deal
-                perror("tcp write:");
-                if(errno == EINTR || errno == EAGAIN){
-                    printf("package write wait mommemt, continue!\n");
-                    usleep(10000);
-                    continue;
-                }else
-                    return -1;
-            }else{
-                offset += ret;
-            }
-        }
-    }
-    return 0;
-}
 static uint8_t sample_calc_sum(SBProtHeader *pHeader, int32_t msg_len)
 {
     int32_t i = 0;
@@ -675,8 +621,6 @@ void get_real_time_msg(AdasWarnFrame *uploadmsg)
 #endif
 }
 
-
-
 void get_adas_Info_for_store(uint8_t type, InfoForStore *mm_store)
 {
     AdasParaSetting para;
@@ -795,7 +739,6 @@ void get_dms_Info_for_store(uint8_t type, InfoForStore *mm_store)
     }
 }
 
-
 int filter_alert_by_time(time_t *last, unsigned int secs)
 {
     struct timespec tv;
@@ -815,7 +758,6 @@ int filter_alert_by_time(time_t *last, unsigned int secs)
 
     return 1;
 }
-
 
 int touch_time(time_t *last)
 {
@@ -883,7 +825,6 @@ int record_speed()
     if(!g_configini.record_speed){
         return 0;   
     }
-    
 
     if(g_configini.record_period < RECORD_TIME_PERIOD_MIN){
         period = RECORD_TIME_PERIOD_MIN;
@@ -1043,7 +984,6 @@ int build_adas_warn_frame(int type, uint8_t status_flag, AdasWarnFrame *uploadms
     uploadmsg->mm_num = 0;
     get_real_time_msg(uploadmsg);
 
-
     if(status_flag == SB_WARN_STATUS_END){
         goto out;
     }
@@ -1128,14 +1068,11 @@ out:
         printf("end media num = %d\n", uploadmsg->mm_num);
     }
 
-
     //snprintf(logbuf, sizeof(logbuf), "adas alert frame:%s",g_pkg_status_p->filepath);
     //data_log(logbuf);
 
     return (sizeof(*uploadmsg) + uploadmsg->mm_num*sizeof(SBMmHeader));
 }
-
-char *dms_alert_type_to_str(uint8_t type);
 
 /*********************************
 * func: build dms warning package
@@ -1467,6 +1404,16 @@ out:
 
 #endif
 
+
+static int package_write(int fd, uint8_t *buf, int len)
+{
+#if defined TCP_INTERFACE
+    tcp_snd(fd, buf, len);
+#elif defined RS232_INTERFACE
+    uart_snd(fd, buf, len);
+#endif
+
+}
 
 #define TCP_SEND_TIMEOUT 1
 static int send_package(int sock, uint8_t *buf)
@@ -2503,140 +2450,8 @@ static int32_t sample_on_cmd(SBProtHeader *pHeader, int32_t len)
     return 0;
 }
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 
 
-#include <arpa/inet.h>
-#include <linux/if_arp.h>
-void bond_net_device(int sock)
-{
-	int ret;
-	struct ifreq interface;
-	//const char *inf = "eth0";
-	const char *inf = g_configini.netdev_name;
-	
-	memset(&interface, 0x00, sizeof(interface));
-	strncpy(interface.ifr_name, inf, IFNAMSIZ);
-	if(setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, (char *)&interface, sizeof(interface)) < 0)
-	{
-		perror("bind device error:");
-        return;
-	}
-}
-int socketkeepalive(int sockfd)
-{
-    int keepAlive=1;//开启keepalive属性
-    int keepIdle=90;//在此时间没有数据则进行探测。
-    int keepInterval=2;//探测时发包的时间间隔为2秒
-    int keepCount=3;//探测尝试的次数。如果第1次探测包就收到响应了，则后2次的不再发送
-    if(setsockopt(sockfd,SOL_SOCKET,SO_KEEPALIVE,(void *)&keepAlive,sizeof(keepAlive))!=0){
-		perror("set TCP_KEEPALIVE error:");
-        return -1;
-    }
-    keepAlive=0;
-    socklen_t len=0;
-    if(getsockopt(sockfd,SOL_SOCKET,SO_KEEPALIVE,(void *)&keepAlive,&len)!=0){
-		perror("set TCP_KEEPALIVE error:");
-        return -1;
-    }
-    printf("get keepAlive = %d\n", keepAlive);
-    if(setsockopt(sockfd,SOL_TCP,TCP_KEEPIDLE,(void *)&keepIdle,sizeof(keepIdle))!=0){
-		perror("set TCP_KEEPIDLE error:");
-        return -1;
-    }
-    if(setsockopt(sockfd,SOL_TCP,TCP_KEEPINTVL,(void *)&keepInterval,sizeof(keepInterval))!=0){
-		perror("set TCP_KEEPINTVAL error:");
-        return -1;
-    }
-    if(setsockopt(sockfd,SOL_TCP,TCP_KEEPCNT,(void *)&keepCount,sizeof(keepCount))!=0){
-		perror("set TCP_KEEPCNT error:");
-        return -1;
-    }
-    return 0;
-}
-
-static int socket_init()
-{
-#define HOST_SERVER_PORT (8888)
-
-    int sock;
-    int32_t ret = 0;
-    int enable = 1;
-    socklen_t optlen;
-    int bufsize = 0;
-
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) {
-        printf("Create socket failed %s\n", strerror(errno));
-        return -1;
-    }
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
-
-    bufsize = 0;
-    optlen = sizeof(bufsize);
-    getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &bufsize, &optlen);
-    printf("get recv buf size = %d\n", bufsize);
-    getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &bufsize, &optlen);
-    printf("get send buf size = %d\n", bufsize);
-    //int setsockopt(int sockfd, int level, int optname,const void *optval, socklen_t optlen);
-
-    printf("set buf size = %d\n", bufsize);
-    bufsize = 64*1024;
-    optlen = sizeof(bufsize);
-    ret = setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &bufsize, optlen);
-    if(ret == -1)
-    {
-        printf("%s:%d error\n", __FILE__, __LINE__);
-        return -1;
-    }
-    bufsize = 64*1024;
-    optlen = sizeof(bufsize);
-    ret = setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &bufsize, optlen);
-    if(ret == -1)
-    {
-        printf("%s:%d error\n", __FILE__, __LINE__);
-        return -1;
-    }
-
-    bufsize = 0;
-    optlen = sizeof(bufsize);
-    getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &bufsize, &optlen);
-    printf("get recv buf size = %d\n", bufsize);
-    getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &bufsize, &optlen);
-    printf("get send buf size = %d\n", bufsize);
-    
-    bond_net_device(sock);
-    //socketkeepalive(sock);
-
-    return sock;
-}
-
-int try_connect(int sock)
-{
-    int ret=0;
-    struct sockaddr_in host_serv_addr;
-    //const char *server_ip = "192.168.100.100";
-    const char *server_ip = g_configini.serverip;
-
-    memset(&host_serv_addr, 0, sizeof(host_serv_addr));
-    host_serv_addr.sin_family = AF_INET;
-    //host_serv_addr.sin_port   = MY_HTONS(HOST_SERVER_PORT);
-    host_serv_addr.sin_port   = MY_HTONS(g_configini.serverport);
-
-    ret = inet_aton(server_ip, &host_serv_addr.sin_addr);
-    if (0 == ret) {
-        printf("inet_aton failed %d %s\n", ret, strerror(errno));
-        return -1;
-    }
-    printf("try connect!\n");
-    ret = connect(sock, (struct sockaddr *)&host_serv_addr, sizeof(host_serv_addr));
-    if(ret){
-        perror("connect:");
-    }
-    return ret;
-}
 
 #define TCP_READ_BUF_SIZE (64*1024)
 #define RECV_HOST_DATA_BUF_SIZE (128*1024)
@@ -2661,6 +2476,15 @@ void parse_cmd(uint8_t *buf, uint8_t *msgbuf)
     }
 }
 
+void tcp_socket_close()
+{
+    printf("try close sock!\n");
+    if(CONNECT_ON == process_socket_status(0, GET_CONNECT_STATUS)){
+        close(hostsock);
+        printf("tcp socket closed!\n");
+        process_socket_status(CONNECT_OFF, SET_CONNECT_STATUS);
+    }
+}
 int do_recv_msg(int fd, uint8_t *buf, int count, uint8_t *msg)
 {
     ssize_t r;
@@ -2682,86 +2506,10 @@ int do_recv_msg(int fd, uint8_t *buf, int count, uint8_t *msg)
     return 0;
 }
 
-
-
-#if 0
-/*******************************************************************/
-/* reads 'count' bytes from a socket  */
-/********************************************************************/
-
-int
-Nread(int fd, char *buf, size_t count, int prot)
-{
-    register ssize_t r;
-    register size_t nleft = count;
-
-    while (nleft > 0) {
-        r = read(fd, buf, nleft);
-        if (r < 0) {
-            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
-                break;
-            else
-                return NET_HARDERROR;
-        } else if (r == 0)
-            break;
-
-        nleft -= r;
-        buf += r;
-    }
-    return count - nleft;
-}
-
-
-/*
- *                      N W R I T E
- */
-
-int
-Nwrite(int fd, const char *buf, size_t count, int prot)
-{
-    register ssize_t r;
-    register size_t nleft = count;
-
-    while (nleft > 0) {
-	r = write(fd, buf, nleft);
-	if (r < 0) {
-	    switch (errno) {
-		case EINTR:
-		case EAGAIN:
-#if (EAGAIN != EWOULDBLOCK)
-		case EWOULDBLOCK:
-#endif
-		return count - nleft;
-
-		case ENOBUFS:
-		return NET_SOFTERROR;
-
-		default:
-		return NET_HARDERROR;
-	    }
-	} else if (r == 0)
-	    return NET_SOFTERROR;
-	nleft -= r;
-	buf += r;
-    }
-    return count;
-}
-#endif
-
-void tcp_socket_close()
-{
-    printf("try close sock!\n");
-    if(CONNECT_ON == process_socket_status(0, GET_CONNECT_STATUS)){
-        close(hostsock);
-        printf("tcp socket closed!\n");
-        process_socket_status(CONNECT_OFF, SET_CONNECT_STATUS);
-    }
-}
-
-
-void connect_init()
+void do_stat_reset()
 {
     g_pkg_status_p->mm_data_trans_waiting = 0;
+    clear_queue();
 }
 
 void *pthread_tcp_recv(void *para)
@@ -2792,21 +2540,20 @@ void *pthread_tcp_recv(void *para)
     }
 
 connect_again:
-    hostsock = socket_init();
+    hostsock = socket_init(&g_configini);
     if(hostsock < 0){
         printf("socket iniit error!\n");
         goto out;
     }
     while (!force_exit) {
-        if(try_connect(hostsock)){
+        if(try_connect(hostsock, &g_configini)){
             if(EBADF == errno){
                 goto connect_again;
             }
             sleep(1);
             continue;
         }else{
-            clear_queue();
-            connect_init();
+            do_stat_reset();
             process_socket_status(CONNECT_ON, SET_CONNECT_STATUS);
             printf("connected!\n");
         }
@@ -2996,136 +2743,48 @@ void *pthread_snap_shot(void *p)
     pthread_exit(NULL);
 }
 
-
-char *dms_alert_type_to_str(uint8_t type)
+const char *dms_alert_type_to_str(uint8_t type)
 {
-    static char s_name[20];
-    strcpy(s_name, "default");
-    switch(type)
-    {
+    switch(type){
         case DMS_FATIGUE_WARN:
-            return strcpy(s_name, "fatigue_warn");
+            return "fatigue_warn";
         case DMS_CALLING_WARN:
-            return strcpy(s_name, "calling_warn");
+            return "calling_warn";
         case DMS_SMOKING_WARN:
-            return strcpy(s_name, "smoking_warn");
+            return "smoking_warn";
         case DMS_DISTRACT_WARN:
-            return strcpy(s_name, "distract_warn");
+            return "distract_warn";
         case DMS_ABNORMAL_WARN:
-            return strcpy(s_name, "absence_warn");
+            return "absence_warn";
         case DMS_SANPSHOT_EVENT:
-            return strcpy(s_name, "dms_snap_warn");
+            return "dms_snap_warn";
         case DMS_DRIVER_CHANGE:
-            return strcpy(s_name, "change_warn");
+            return "change_warn";
         default:
-            return strcpy(s_name, "default");
-
+            return "default";
     }
 }
-
-
-#define FCW_NAME            "FCW"
-#define LDW_NAME            "LDW"
-#define HW_NAME             "HW"
-#define PCW_NAME            "PCW"
-#define FLC_NAME            "FLC"
-#define TSRW_NAME           "TSRW"
-#define TSR_NAME            "TSR"
-#define SNAP_NAME           "SNAP"
-char *adas_alert_type_to_str(uint8_t type)
+const char *adas_alert_type_to_str(uint8_t type)
 {
-    static char s_name[20];
-    strcpy(s_name, "default");
-
-#if defined ENABLE_ADAS
-    switch(type)
-    {
+    switch(type){
         case SB_WARN_TYPE_FCW:
-            return strcpy(s_name, FCW_NAME);
+            return "FCW";
         case SB_WARN_TYPE_LDW:
-            return strcpy(s_name, LDW_NAME);
+            return "LDW";
         case SB_WARN_TYPE_HW:
-            return strcpy(s_name, HW_NAME);
+            return "HW";
         case SB_WARN_TYPE_PCW:
-            return strcpy(s_name, PCW_NAME);
+            return "PCW";
         case SB_WARN_TYPE_FLC:
-            return strcpy(s_name, FLC_NAME);
+            return "FLC";
         case SB_WARN_TYPE_TSRW:
-            return strcpy(s_name, TSRW_NAME);
+            return "TSRW";
         case SB_WARN_TYPE_TSR:
-            return strcpy(s_name, TSR_NAME);
+            return "TSR";
         case SB_WARN_TYPE_SNAP:
-            return strcpy(s_name, SNAP_NAME);
+            return "SNAP";
         default:
-            return s_name;
+            return "default";
     }
-#elif defined ENABLE_DMS
-    switch(type)
-    {
-        case DMS_FATIGUE_WARN:
-            return strcpy(s_name, "fatigue_warn");
-        case DMS_CALLING_WARN:
-            return strcpy(s_name, "calling_warn");
-        case DMS_SMOKING_WARN:
-            return strcpy(s_name, "smoking_warn");
-        case DMS_DISTRACT_WARN:
-            return strcpy(s_name, "distract_warn");
-        case DMS_ABNORMAL_WARN:
-            return strcpy(s_name, "absence_warn");
-        case DMS_SANPSHOT_EVENT:
-            return strcpy(s_name, "dms_snap_warn");
-        case DMS_DRIVER_CHANGE:
-            return strcpy(s_name, "change_warn");
-        default:
-            return strcpy(s_name, "default");
-
-    }
-#endif
-
 }
-
-int str_to_warning_type(char *type, uint8_t *val)
-{
-
-    if(!strncmp(FCW_NAME, type, sizeof(FCW_NAME)))
-    {
-        *val = SB_WARN_TYPE_FCW;
-    }
-    else if(!strncmp(LDW_NAME, type, sizeof(LDW_NAME)))
-    {
-        *val = SB_WARN_TYPE_LDW;
-    }
-    else if(!strncmp(HW_NAME, type, sizeof(HW_NAME)))
-    {
-        *val = SB_WARN_TYPE_HW;
-    }
-    else if(!strncmp(PCW_NAME, type, sizeof(PCW_NAME)))
-    {
-        *val = SB_WARN_TYPE_PCW;
-    }
-    else if(!strncmp(FLC_NAME, type, sizeof(FLC_NAME)))
-    {
-        *val = SB_WARN_TYPE_FLC;
-    }
-    else if(!strncmp(TSRW_NAME, type, sizeof(TSRW_NAME)))
-    {
-        *val = SB_WARN_TYPE_TSRW;
-    }
-    else if(!strncmp(TSR_NAME, type, sizeof(TSR_NAME)))
-    {
-        *val = SB_WARN_TYPE_TSR;
-    }
-    else if(!strncmp(SNAP_NAME, type, sizeof(SNAP_NAME)))
-    {
-        *val = SB_WARN_TYPE_SNAP;
-    }
-    else
-    {
-        printf("unknow warn type: %s\n", type);
-        return -1;   
-    }
-
-    return 0;
-}
-
 
