@@ -1269,7 +1269,7 @@ void deal_wsi_dms_info(WsiFrame *can)
 
     static uint8_t dms_alert_last[8] = {0,0,0,0,0,0,0,0};
     uint8_t dms_alert[8] = {0,0,0,0,0,0,0,0};
-    uint8_t dms_alert_mask[8] = {0xFF,0xFF,0x03,0,0,0,0,0};
+    uint8_t dms_alert_mask[8] = {0xFF,0xFF,0x0F,0,0,0,0,0};
 
     SBProtHeader *pSend = (SBProtHeader *) txbuf;
     DsmWarnFrame *uploadmsg = (DsmWarnFrame *)&msgbuf[0];
@@ -1282,7 +1282,7 @@ void deal_wsi_dms_info(WsiFrame *can)
 #endif
     
     //set phone alert as faceid, to test faceid
-    can->warning[2] = can->warning[1];
+    //can->warning[2] = can->warning[1];
 
     for(i=0; i<sizeof(can->warning); i++){
         dms_alert[i] = can->warning[i] & dms_alert_mask[i];
