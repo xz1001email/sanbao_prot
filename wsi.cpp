@@ -823,11 +823,9 @@ static const struct lws_protocols protocols[] = {
 };
 
 
-void tcp_socket_close();
 void notice_tcp_send_exit();
 void pthread_exit_notice(void)
 {
-    //tcp_socket_close();
     notice_tcp_send_exit();
 }
 
@@ -1219,14 +1217,14 @@ int main(int argc, char **argv)
         printf("pthread_create fail!\n");
         return -1;
     }
-    if(pthread_create(&pth[1], NULL, pthread_tcp_recv, NULL)){
+    if(pthread_create(&pth[1], NULL, pthread_process_recv, NULL)){
         printf("pthread_create fail!\n");
         return -1;
     }
     pthread_detach(pth[1]);
 
 
-    if(pthread_create(&pth[2], NULL, pthread_tcp_send, NULL)){
+    if(pthread_create(&pth[2], NULL, pthread_process_send, NULL)){
         printf("pthread_create fail!\n");
         return -1;
     }

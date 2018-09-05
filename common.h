@@ -9,14 +9,8 @@ using namespace std;
 
 
 /**********queue and repeat_send struct****************/
-//#define IMAGE_SIZE_PER_PACKET   (1024*16)
-#define IMAGE_SIZE_PER_PACKET   (64*1024)
-//#define IMAGE_SIZE_PER_PACKET   (4*1024)
-
-#define PTR_QUEUE_BUF_SIZE   (2*(IMAGE_SIZE_PER_PACKET + 64)) //加64, 大于 header + tail, 
 #define PTR_QUEUE_BUF_CNT    (16)
 #define UCHAR_QUEUE_SIZE    (128*1024)
-
 
 #define MSG_ACK_READY           0
 #define MSG_ACK_WAITING         1

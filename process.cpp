@@ -44,13 +44,58 @@ static int32_t sample_send_image(uint8_t devid);
 extern volatile int force_exit;
 extern LocalConfig g_configini;
 
-int hostsock = -1;
+prot_handle g_handle;
 
 #define GET_NEXT_SEND_NUM        1
 #define RECORD_RECV_NUM          2
 #define GET_RECV_NUM             3
 
 static uint32_t unescaple_msg(uint8_t *buf, uint8_t *msg, int msglen);
+
+const char *dms_alert_type_to_str(uint8_t type)
+{
+    switch(type){
+        case DMS_FATIGUE_WARN:
+            return "fatigue_warn";
+        case DMS_CALLING_WARN:
+            return "calling_warn";
+        case DMS_SMOKING_WARN:
+            return "smoking_warn";
+        case DMS_DISTRACT_WARN:
+            return "distract_warn";
+        case DMS_ABNORMAL_WARN:
+            return "absence_warn";
+        case DMS_SANPSHOT_EVENT:
+            return "dms_snap_warn";
+        case DMS_DRIVER_CHANGE:
+            return "change_warn";
+        default:
+            return "default";
+    }
+}
+const char *adas_alert_type_to_str(uint8_t type)
+{
+    switch(type){
+        case SB_WARN_TYPE_FCW:
+            return "FCW";
+        case SB_WARN_TYPE_LDW:
+            return "LDW";
+        case SB_WARN_TYPE_HW:
+            return "HW";
+        case SB_WARN_TYPE_PCW:
+            return "PCW";
+        case SB_WARN_TYPE_FLC:
+            return "FLC";
+        case SB_WARN_TYPE_TSRW:
+            return "TSRW";
+        case SB_WARN_TYPE_TSR:
+            return "TSR";
+        case SB_WARN_TYPE_SNAP:
+            return "SNAP";
+        default:
+            return "default";
+    }
+}
 
 pthread_mutex_t photo_queue_lock = PTHREAD_MUTEX_INITIALIZER;
 queue<ptr_queue_node *> g_image_queue;
@@ -251,6 +296,7 @@ int record_run_time()
 #endif
 
 
+int prot_init_pre(prot_handle *phandle);
 extern LocalConfig g_configini;
 int global_var_init()
 {
@@ -272,6 +318,10 @@ int global_var_init()
 
     data_log_init(PROT_LOG_NAME, false);
     record_run_time();
+
+
+    /*init for io process*/
+    prot_init_pre(&g_handle);
 
     return 0;
 }
@@ -849,7 +899,7 @@ int record_speed()
 }
 
 
-void tcp_socket_close();
+void tcp_socket_close(prot_handle *handle);
 void check_heart_beat()
 {
     static time_t s_record_last = 0;
@@ -874,7 +924,7 @@ void check_heart_beat()
         if(limit_record_time(&s_record_last, g_configini.check_heart_period)){
             if(heart_beat_process(0, READ_MSG) == HEART_BEAT_DEATH){
                 printf("heart beat death!\n");
-                tcp_socket_close();
+                tcp_socket_close(&g_handle);
             }else{ //设置心跳关闭，等待激活。
                 printf("set heart beat down!\n");
                 heart_beat_process(HEART_BEAT_DEATH, WRITE_MSG);
@@ -1404,24 +1454,16 @@ out:
 
 #endif
 
-
-static int package_write(int fd, uint8_t *buf, int len)
-{
-#if defined TCP_INTERFACE
-    tcp_snd(fd, buf, len);
-#elif defined RS232_INTERFACE
-    uart_snd(fd, buf, len);
-#endif
-
-}
-
 #define TCP_SEND_TIMEOUT 1
-static int send_package(int sock, uint8_t *buf)
+static int send_package(prot_handle *handle)
 {
     int rc = 0;
     int len = 0;
     int i = 0;
     struct timespec ts;
+
+    uint8_t *buf = handle->sndData_s;
+    int fd = handle->fd;
 
     if(CONNECT_OFF == process_socket_status(0, GET_CONNECT_STATUS)){
         printf("write: tcp not connect!\n");
@@ -1440,15 +1482,18 @@ static int send_package(int sock, uint8_t *buf)
 
     WSI_DEBUG("[send] pop: cmd = 0x%x, index = %d, header len = %d\n", header.pkg.cmd,header.pkg.index, header.len);
     //printbuf(header.buf, header.len);
+
+    handle->sndlen = header.len;
+
     if(header.pkg.ack_status == MSG_ACK_READY){// no need ack
         printf("no need ack!\n");
-        package_write(sock, header.buf, header.len);
+        handle->snd(handle);
         goto out;
     }
     if(header.pkg.ack_status == MSG_ACK_WAITING){
         for(i = 0; i < 3; i++){
             printf("ack waiting!\n");
-            package_write(sock, header.buf, header.len);
+            handle->snd(handle);
             header.pkg.send_repeat++;
 
             //printf("get lock\n");
@@ -1492,30 +1537,19 @@ void notice_tcp_send_exit()
 }
 
 
-void *pthread_tcp_send(void *para)
+void *pthread_process_send(void *para)
 {
-    uint8_t *writebuf = NULL;
 
     if(!setcondattr(&recv_ack_cond)){
         printf("setcondattr sucess!\n");
     }
 
-    writebuf = (uint8_t *)malloc(PTR_QUEUE_BUF_SIZE);
-    if(!writebuf){
-        perror("send pkg malloc");
-        goto out;
-    }
-
     while (!force_exit) {
         printf("sem waiting...\n");
         sem_wait(&send_data);
-        //send_pkg_to_host(hostsock, writebuf);
-        send_package(hostsock, writebuf);
+        //send_pkg_to_host(fd, writebuf);
+        send_package(&g_handle);
     }
-out:
-    if(writebuf)
-        free(writebuf);
-
     pthread_exit(NULL);
 }
 
@@ -2184,8 +2218,15 @@ void send_work_status_req_ack(SBProtHeader *pHeader, int32_t len)
         printf("recv cmd:0x%x, data len maybe error!\n", pHeader->cmd);
     }
 }
-void send_work_status(uint8_t devid)
+void send_work_status()
 {
+    uint8_t devid=0;
+#if defined ENABLE_ADAS
+    devid = SAMPLE_DEVICE_ID_ADAS;
+#elif defined ENABLE_DMS
+    devid = SAMPLE_DEVICE_ID_DMS;
+#endif
+
     ModuleStatus module;
     uint8_t txbuf[256] = {0};
     SBProtHeader *pSend = (SBProtHeader *) txbuf;
@@ -2453,163 +2494,159 @@ static int32_t sample_on_cmd(SBProtHeader *pHeader, int32_t len)
 
 
 
-#define TCP_READ_BUF_SIZE (64*1024)
-#define RECV_HOST_DATA_BUF_SIZE (128*1024)
-void parse_cmd(uint8_t *buf, uint8_t *msgbuf)
+void prot_parse(prot_handle *handle)
 {
     uint32_t ret = 0;
     uint8_t sum = 0;
     uint32_t framelen = 0;
+    int i = 0;
+
+
+    uint8_t *buf = handle->rcvData_s;
+    uint8_t *msgbuf = handle->rcvData;
+    int len = handle->rcvlen;
+
     SBProtHeader *pHeader = NULL;
     pHeader = (SBProtHeader *) msgbuf;
-    ret = unescaple_msg(buf, msgbuf, RECV_HOST_DATA_BUF_SIZE);
-    if(ret>0){
-        framelen = ret;
-        //printf("recv framelen = %d\n", framelen);
-        sum = sample_calc_sum(pHeader, framelen);
-        if (sum != pHeader->checksum) {
-            printf("Checksum missmatch calcated: 0x%02hhx != 0x%2hhx\n",
-                    sum, pHeader->checksum);
-        }else{
-            sample_on_cmd(pHeader, framelen);
+    
+    while(len--){
+        ret = unescaple_msg(&buf[i++], msgbuf, SLIP_DATA_BUF_SIZE);
+        if(ret>0){
+            framelen = ret;
+            //printf("recv framelen = %d\n", framelen);
+            sum = sample_calc_sum(pHeader, framelen);
+            if (sum != pHeader->checksum) {
+                printf("Checksum missmatch calcated: 0x%02hhx != 0x%2hhx\n",
+                        sum, pHeader->checksum);
+            }else{
+                sample_on_cmd(pHeader, framelen);
+            }
         }
     }
 }
 
-void tcp_socket_close()
+void tcp_socket_close(prot_handle *handle)
 {
     printf("try close sock!\n");
     if(CONNECT_ON == process_socket_status(0, GET_CONNECT_STATUS)){
-        close(hostsock);
+        handle->close(handle);
         printf("tcp socket closed!\n");
         process_socket_status(CONNECT_OFF, SET_CONNECT_STATUS);
     }
 }
-int do_recv_msg(int fd, uint8_t *buf, int count, uint8_t *msg)
+void do_stat_reset()
 {
-    ssize_t r;
-    int i=0;
+    g_pkg_status_p->mm_data_trans_waiting = 0;
+    send_stat_pkg_init();
+    clear_queue();
+}
 
-    r = read(fd, buf, count);
-    if (r < 0) {
-        if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
-            return 0;
-        else
-            return -1;
-    } else if (r == 0)
-            return -1;
+void handle_distroy(prot_handle *handle)
+{
+    handle->close(handle);
 
-    while(r--){
-        parse_cmd(&buf[i++], msg);
+    if(handle->rcvData_s)
+        free(handle->rcvData_s);
+
+    if(handle->rcvData)
+        free(handle->rcvData);
+
+    if(handle->sndData_s)
+        free(handle->sndData_s);
+}
+
+
+#define TCP_INTERFACE
+int prot_init_pre(prot_handle *phandle)
+{
+    
+#if defined TCP_INTERFACE
+    phandle->init = socket_init;
+    phandle->close= socket_close;
+    phandle->snd = tcp_snd;
+    phandle->rcv = tcp_rcv;
+    phandle->on_connect = try_connect;;
+#elif defined RS232_INTERFACE
+    phandle->init = uart_init;
+    phandle->close= uart_close;
+    phandle->snd = uart_snd;
+    phandle->rcv = uart_rcv;
+    phandle->on_connect = NULL;;
+#endif
+
+    phandle->parse = prot_parse;
+    phandle->config = &g_configini;
+
+    //malloc
+    phandle->rcvData_s = (uint8_t *)malloc(SLIP_DATA_BUF_SIZE);
+    if(!phandle->rcvData_s){
+        perror("phandle->rcvData_s malloc error");
+        return -1;
+    }
+    phandle->rcvData = (uint8_t *)malloc(DATA_BUF_SIZE);
+    if(!phandle->rcvData){
+        perror("phandle->rcvData malloc error");
+        free(phandle->rcvData_s);
+        return -1;
+    }
+
+    phandle->sndData_s = (uint8_t *)malloc(SLIP_DATA_BUF_SIZE);
+    if(!phandle->sndData_s){
+        perror("phandle->rcvData_s malloc error");
+        free(phandle->rcvData);
+        free(phandle->rcvData_s);
+        return -1;
     }
 
     return 0;
 }
 
-void do_stat_reset()
-{
-    g_pkg_status_p->mm_data_trans_waiting = 0;
-    clear_queue();
-}
-
-void *pthread_tcp_recv(void *para)
+void *pthread_process_recv(void *para)
 {
     int32_t ret = 0;
-    int i=0;
-    static int tcprecvcnt = 0;
-    uint8_t *readbuf = NULL;
-    uint8_t *msgbuf = NULL;
-    fd_set rfds;
-    struct timeval tv;
-    int retval;
-    char logbuf[200];
 
     prctl(PR_SET_NAME, "tcp_process");
-    send_stat_pkg_init();
 
-    msgbuf = (uint8_t *)malloc(RECV_HOST_DATA_BUF_SIZE);
-    if(!msgbuf)
-    {
-        perror("parse_host_cmd malloc");
-        return NULL;
-    }
-    readbuf = (uint8_t *)malloc(TCP_READ_BUF_SIZE);
-    if(!readbuf){
-        perror("tcp readbuf malloc");
-        goto out;
-    }
+    do_stat_reset();
 
 connect_again:
-    hostsock = socket_init(&g_configini);
-    if(hostsock < 0){
-        printf("socket iniit error!\n");
+    ret = g_handle.init(&g_handle);
+    if(ret < 0){
+        printf("handle iniit error!\n");
         goto out;
     }
+
     while (!force_exit) {
-        if(try_connect(hostsock, &g_configini)){
-            if(EBADF == errno){
-                goto connect_again;
+        if(g_handle.on_connect){
+            if( g_handle.on_connect(&g_handle)){ /*do connect*/
+                if(EBADF == errno){
+                    goto connect_again;
+                }
+                sleep(1);
+                continue;
             }
-            sleep(1);
-            continue;
-        }else{
-            do_stat_reset();
-            process_socket_status(CONNECT_ON, SET_CONNECT_STATUS);
-            printf("connected!\n");
         }
-#if defined ENABLE_ADAS
-        send_work_status(SAMPLE_DEVICE_ID_ADAS);
-#elif defined ENABLE_DMS
-        send_work_status(SAMPLE_DEVICE_ID_DMS);
-#endif
+
+        do_stat_reset();
+        process_socket_status(CONNECT_ON, SET_CONNECT_STATUS);
+        printf("connected!\n");
+        send_work_status();
+
         while(!force_exit){
-            FD_ZERO(&rfds);
-            FD_SET(hostsock, &rfds);
-            /* Wait up to five seconds. */
-            //printf("set tcp recv timeout %d\n", g_configini.check_heart_period);
-            //tv.tv_sec = g_configini.check_heart_period;
-            tv.tv_sec = 1;
-            tv.tv_usec = 0;
-            retval = select(hostsock+1, &rfds, NULL, NULL, &tv);
-            if (retval == -1 && errno != EINTR){ //error
-                    perror("select()");
-                    tcp_socket_close();
-                    goto connect_again;
-            }
-            if(retval > 0){
-                if(FD_ISSET(hostsock, &rfds)){
-                    ret = do_recv_msg(hostsock, readbuf, TCP_READ_BUF_SIZE, msgbuf);
-                    if(ret < 0){
-                            perror("recv");
-                            tcp_socket_close();
-                            goto connect_again;
-                    }
-                }
-            }
-            if(retval == 0){
-#if 0
-                if(g_configini.use_heart){
-                    printf("tcp recv timeout!\n");
-                    snprintf(logbuf, sizeof(logbuf), "tcp recv timeout %d!, connect again\n", g_configini.check_heart_period);
-                    data_log(logbuf);
-                    tcp_socket_close();
-                    goto connect_again;
-                }
-#endif
+            //printf("fd = %d\n", g_handle.fd);
+            ret = g_handle.rcv(&g_handle);
+            if(ret < 0){
+                goto connect_again;
+                break;
             }
         }
     }
 out:
+    handle_distroy(&g_handle);
     printf("%s exit!\n", __FUNCTION__);
-    if(readbuf)
-        free(readbuf);
-    if(msgbuf)
-        free(msgbuf);
-
-    if(hostsock>0)
-        tcp_socket_close();
     pthread_exit(NULL);
 }
+
 static char get_head = 0;
 static char got_esc_char = 0;
 static int cnt = 0;
@@ -2741,50 +2778,5 @@ void *pthread_snap_shot(void *p)
         }
     }
     pthread_exit(NULL);
-}
-
-const char *dms_alert_type_to_str(uint8_t type)
-{
-    switch(type){
-        case DMS_FATIGUE_WARN:
-            return "fatigue_warn";
-        case DMS_CALLING_WARN:
-            return "calling_warn";
-        case DMS_SMOKING_WARN:
-            return "smoking_warn";
-        case DMS_DISTRACT_WARN:
-            return "distract_warn";
-        case DMS_ABNORMAL_WARN:
-            return "absence_warn";
-        case DMS_SANPSHOT_EVENT:
-            return "dms_snap_warn";
-        case DMS_DRIVER_CHANGE:
-            return "change_warn";
-        default:
-            return "default";
-    }
-}
-const char *adas_alert_type_to_str(uint8_t type)
-{
-    switch(type){
-        case SB_WARN_TYPE_FCW:
-            return "FCW";
-        case SB_WARN_TYPE_LDW:
-            return "LDW";
-        case SB_WARN_TYPE_HW:
-            return "HW";
-        case SB_WARN_TYPE_PCW:
-            return "PCW";
-        case SB_WARN_TYPE_FLC:
-            return "FLC";
-        case SB_WARN_TYPE_TSRW:
-            return "TSRW";
-        case SB_WARN_TYPE_TSR:
-            return "TSR";
-        case SB_WARN_TYPE_SNAP:
-            return "SNAP";
-        default:
-            return "default";
-    }
 }
 

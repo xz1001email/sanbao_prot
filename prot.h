@@ -123,6 +123,7 @@
 #define SB_WARN_TSR_TYPE_SPEED   (0x1)
 #define SB_WARN_TSR_TYPE_HIGHT   (0x2)
 #define SB_WARN_TSR_TYPE_WEIGHT  (0x3)
+
 typedef struct __SBProtHeader
 {
     uint8_t     magic;
@@ -661,12 +662,12 @@ typedef struct __InfoForStore{
 
 //pthread
 void *pthread_websocket_client(void *para);
-void *pthread_tcp_recv(void *para);
+void *pthread_process_recv(void *para);
 void *pthread_encode_jpeg(void *p);
 void *pthread_save_media(void *p);
 void *pthread_req_media_process(void *para);
 void *pthread_snap_shot(void *p);
-void *pthread_tcp_send(void *para);
+void *pthread_process_send(void *para);
 
 //para file
 int global_var_init();
@@ -696,4 +697,44 @@ void deal_wsi_dms_info2( DmsCan779 *can);
 
 void mmid_to_filename(uint32_t id, uint8_t type, char *filepath);
 
+
+#define IMAGE_SIZE_PER_PACKET   (64*1024)
+#define PTR_QUEUE_BUF_SIZE   (2*(IMAGE_SIZE_PER_PACKET + 64)) //加64, 大于 header + tail, 
+
+#define DATA_BUF_SIZE IMAGE_SIZE_PER_PACKET
+#define SLIP_DATA_BUF_SIZE PTR_QUEUE_BUF_SIZE
+
+typedef struct __prot_handle{
+
+    int fd;
+
+    LocalConfig *config;
+    uint8_t *rcvData_s; /*slip 封装数据*/
+    uint8_t *rcvData; /*unslip 数据*/
+    int rcvlen;
+
+    uint8_t *sndData_s;
+    uint8_t *sndData;
+    int sndlen;
+
+/*
+ *              IO handle
+ * */
+
+    int (*snd)(struct __prot_handle *handle);
+    int (*rcv)(struct __prot_handle *handle);
+    int (*on_connect)(struct __prot_handle *handle);
+
+    int (*init)(struct __prot_handle *handle);
+    int (*close)(struct __prot_handle *handle);
+
+    
+    void (*parse)(struct __prot_handle *handle);
+
+    //int (*do_rest)(LocalConfig *config);
+
+}prot_handle;
+
 #endif
+
+
