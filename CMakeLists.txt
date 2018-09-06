@@ -95,8 +95,22 @@ ELSEIF(ANDROID_ABI)
 
     IF (ADAS)
         ADD_DEFINITIONS(-DENABLE_ADAS)
-    ELSE()
+        MESSAGE(STATUS "building for ADAS")
+    ENDIF()
+
+    IF (DMS)
         ADD_DEFINITIONS(-DENABLE_DMS)
+        MESSAGE(STATUS "building for DMS")
+    ENDIF()
+
+    IF (TCP)
+        ADD_DEFINITIONS(-DTCP_INTERFACE)
+        MESSAGE(STATUS "building using TCP")
+    ENDIF()
+
+    IF (RS232)
+        ADD_DEFINITIONS(-DRS232_INTERFACE)
+        MESSAGE(STATUS "building using RS232")
     ENDIF()
 
     ADD_EXECUTABLE(wsi wsi.cpp process.cpp rb_rw.cpp para.cpp common.cpp net.cpp uart.cpp)

@@ -17,22 +17,46 @@ adas_target="AdasProt"
 output_folder="output/"
 
 device=$1
+interface=$2
 target=wsi
 buildpath="arm/"
 buildtarget=$buildpath"bin/"$target
 
 mkdir -p $buildpath
 cd $buildpath
-if [ "$device" == "a" -o "$device" == "adas" ]
+
+if [ "$device" == "adas" -a "$interface" == "tcp" ]
 then
-    echo "./building for adas"
     target_dist=$adas_target
-    ../adas_cmake.sh
-else
-    echo "./building for dms"
+    option="-DADAS=true -DDMS=false -DTCP=true -DRS232=false"
+    echo "./building for adas tcp"
+    ../android_cmake.sh $option
+
+elif [ "$device" == "adas" -a "$interface" == "rs232" ]
+then
+    target_dist=$adas_target
+    option="-DADAS=true -DDMS=false -DTCP=false -DRS232=true"
+    echo "./building for adas rs232"
+    ../android_cmake.sh $option
+
+elif [ "$device" == "dms" -a "$interface" == "tcp" ]
+then
     target_dist=$dms_target
-    ../dms_cmake.sh
+    option="-DADAS=false -DDMS=true -DTCP=true -DRS232=false"
+    echo "./building for dms tcp"
+    ../android_cmake.sh $option
+
+elif [ "$device" == "dms" -a "$interface" == "rs232" ]
+then
+    target_dist=$dms_target
+    option="-DADAS=false -DDMS=true -DTCP=false -DRS232=true"
+    echo "./building for dms rs232"
+    ../android_cmake.sh $option
+else
+    echo "usage: [option] adas/dms, tcp/rs232"
+    exit 1
 fi
+
 make
 cd ..
 

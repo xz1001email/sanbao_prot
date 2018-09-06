@@ -2556,7 +2556,7 @@ void handle_distroy(prot_handle *handle)
 
 
 //#define TCP_INTERFACE
-#define RS232_INTERFACE
+//#define RS232_INTERFACE
 int prot_init_pre(prot_handle *phandle)
 {
     
