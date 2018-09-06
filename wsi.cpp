@@ -962,7 +962,7 @@ void set_local_config_default(LocalConfig *config)
 #define TTY_NAME "/dev/ttySC0"
     snprintf(&config->tty_name[0], sizeof(config->tty_name), "%s", TTY_NAME);
     config->baudrate = 115200;
-    config->parity = 'N';
+    snprintf(&config->parity[0], sizeof(config->parity), "%s", "NONE");
     config->stopbit = 1;
     config->bits = 8;
 }
@@ -979,7 +979,7 @@ void local_config_dump(LocalConfig *config)
 
     printf("tty_name: %s\n", config->tty_name);
     printf("baudrate: %d\n", config->baudrate);
-    printf("parity: %c\n", config->parity);
+    printf("parity: %s\n", config->parity);
     printf("stopbit: %d\n", config->stopbit);
     printf("bits: %d\n", config->bits);
 
@@ -1046,9 +1046,10 @@ static bool get_tty_config(const rapidjson::Value& val, LocalConfig *config)
     assert(val["stopbit"].IsUint());
     config->stopbit = val["stopbit"].GetUint();
 
-    assert(val["parity"].IsNumber());
-    assert(val["parity"].IsUint());
-    config->parity = val["parity"].GetUint();
+
+    assert(val["parity"].IsString());
+    val["parity"].GetString();
+    snprintf(&config->parity[0], sizeof(config->parity), "%s", val["parity"].GetString());
 
     return true;
 }
@@ -1160,7 +1161,6 @@ static int parse_prot_json(char *buffer, LocalConfig *config)
     get_client_config(document["client"], config);
     get_alert_para(document["alert_para"], config);
     get_tty_config(document["tty"], config);
-
 
     return 0;
 }

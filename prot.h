@@ -620,7 +620,7 @@ typedef struct __LocalConfig {
     //uart
     char tty_name[32];
     int  baudrate;
-    int  parity;
+    char parity[32];
     int  bits;
     int  stopbit;
 

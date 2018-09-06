@@ -8,6 +8,22 @@
         "ip": "192.168.100.211",
         "port": 0,
         "device": "eth0"
+    },
+    "alert_para": {
+        "speed_filter_enable": true,
+        "jpeg_fps": 5,
+        "record_speed": true,
+        "record_period": 60,
+        "use_heart": true,
+        "check_heart_period": 180
+    },
+    "tty": {
+        "tty_name": "/dev/ttySC0",
+        "baudrate": 115200,
+        "parity": "NONE",
+        "stopbit": 1,
+        "bits": 8
     }
+
 }
 

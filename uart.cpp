@@ -59,16 +59,19 @@ int set_opt(int fd,int nSpeed, int nBits, char nEvent, int nStop)
     switch( nEvent )
     {
         case 'O':
+        case 'o':
             newtio.c_cflag |= PARENB; 
             newtio.c_cflag |= PARODD;  
             newtio.c_iflag |= (INPCK | ISTRIP); 
             break;
         case 'E':
+        case 'e':
             newtio.c_iflag |= (INPCK | ISTRIP);
             newtio.c_cflag |= PARENB;
             newtio.c_cflag &= ~PARODD;
             break;
         case 'N': 
+        case 'n': 
             newtio.c_cflag &= ~PARENB;
             break;
     }
@@ -150,7 +153,8 @@ int uart_init(prot_handle *handle)
     printf("uart config:\n");
     printf("tty_name: %s\n", config->tty_name);
     printf("baudrate: %d\n", config->baudrate);
-    printf("parity: %c\n", config->parity);
+    printf("parity str: %s\n", config->parity);
+    printf("parity: %c\n", config->parity[0]);
     printf("stopbit: %d\n", config->stopbit);
     printf("bits: %d\n", config->bits);
 
@@ -160,7 +164,7 @@ int uart_init(prot_handle *handle)
         printf("open tty fail, error:%s\n", strerror(errno));
         return -1;
     }
-    err = set_opt(fd, config->baudrate,  config->bits, config->parity, config->stopbit);
+    err = set_opt(fd, config->baudrate,  config->bits, config->parity[0], config->stopbit);
     if(err){
         printf("set tty fail, error:%s\n", strerror(errno));
         return -1;
