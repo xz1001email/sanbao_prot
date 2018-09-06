@@ -30,6 +30,7 @@
 
 
 #include "net.h"
+#include "uart.h"
 
 #include <queue>
 using namespace std;
@@ -2390,6 +2391,7 @@ int recv_upgrade_file(SBProtHeader *pHeader, int32_t len)
 
     return 0;
 }
+
 static int32_t sample_on_cmd(SBProtHeader *pHeader, int32_t len)
 {
     ptr_queue_node msgack;
@@ -2491,9 +2493,6 @@ static int32_t sample_on_cmd(SBProtHeader *pHeader, int32_t len)
     return 0;
 }
 
-
-
-
 void prot_parse(prot_handle *handle)
 {
     uint32_t ret = 0;
@@ -2556,7 +2555,8 @@ void handle_distroy(prot_handle *handle)
 }
 
 
-#define TCP_INTERFACE
+//#define TCP_INTERFACE
+#define RS232_INTERFACE
 int prot_init_pre(prot_handle *phandle)
 {
     

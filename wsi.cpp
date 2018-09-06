@@ -958,6 +958,13 @@ void set_local_config_default(LocalConfig *config)
 
     config->use_heart = 1;
     config->check_heart_period = 180;
+    
+#define TTY_NAME "/dev/ttySC0"
+    snprintf(&config->tty_name[0], sizeof(config->tty_name), "%s", TTY_NAME);
+    config->baudrate = 115200;
+    config->parity = 'N';
+    config->stopbit = 1;
+    config->bits = 8;
 }
 
 void local_config_dump(LocalConfig *config)
@@ -970,6 +977,11 @@ void local_config_dump(LocalConfig *config)
     printf("clientip: %s\n", config->clientip);
     printf("client netdev_name: %s\n", config->netdev_name);
 
+    printf("tty_name: %s\n", config->tty_name);
+    printf("baudrate: %d\n", config->baudrate);
+    printf("parity: %c\n", config->parity);
+    printf("stopbit: %d\n", config->stopbit);
+    printf("bits: %d\n", config->bits);
 
     printf("jpeg_coder_fps : %d\n", config->jpeg_coder_fps);
     printf("speed_filter_enable : %d\n", config->speed_filter_enable);
@@ -1015,6 +1027,32 @@ static bool get_client_config(const rapidjson::Value& val, LocalConfig *config)
 
     return true;
 }
+
+static bool get_tty_config(const rapidjson::Value& val, LocalConfig *config)
+{
+    assert(val["tty_name"].IsString());
+    val["tty_name"].GetString();
+    snprintf(&config->tty_name[0], sizeof(config->tty_name), "%s", val["tty_name"].GetString());
+
+    assert(val["baudrate"].IsNumber());
+    assert(val["baudrate"].IsUint());
+    config->baudrate = val["baudrate"].GetUint();
+
+    assert(val["bits"].IsNumber());
+    assert(val["bits"].IsUint());
+    config->bits = val["bits"].GetUint();
+
+    assert(val["stopbit"].IsNumber());
+    assert(val["stopbit"].IsUint());
+    config->stopbit = val["stopbit"].GetUint();
+
+    assert(val["parity"].IsNumber());
+    assert(val["parity"].IsUint());
+    config->parity = val["parity"].GetUint();
+
+    return true;
+}
+
 
 #if 0
 static bool get_alert_para(const rapidjson::Value& val, LocalConfig *config)
@@ -1100,7 +1138,6 @@ static bool get_alert_para(const rapidjson::Value& val, LocalConfig *config)
 }
 #endif
 
-
 static int parse_prot_json(char *buffer, LocalConfig *config)
 {
     Document document;  // Default template parameter uses UTF8 and MemoryPoolAllocator.
@@ -1117,10 +1154,13 @@ static int parse_prot_json(char *buffer, LocalConfig *config)
     assert(document.HasMember("server"));
     assert(document.HasMember("client"));
     assert(document.HasMember("alert_para"));
+    assert(document.HasMember("tty"));
 
     get_server_config(document["server"], config);
     get_client_config(document["client"], config);
     get_alert_para(document["alert_para"], config);
+    get_tty_config(document["tty"], config);
+
 
     return 0;
 }

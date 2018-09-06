@@ -617,6 +617,13 @@ typedef struct __LocalConfig {
     uint16_t clientport;
     char netdev_name[32];
 
+    //uart
+    char tty_name[32];
+    int  baudrate;
+    int  parity;
+    int  bits;
+    int  stopbit;
+
     char jpeg_coder_fps; // 帧率设置
     char speed_filter_enable; //报警的速度阀值
     char time_period_filter;  //报警过滤时间
