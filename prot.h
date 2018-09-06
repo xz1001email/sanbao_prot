@@ -402,9 +402,11 @@ typedef struct __DmsAlertInfo {
     /* 低头 */
     uint8_t alert_bow:2;
 
+    /* 抬头 */
+    uint8_t alert_look_up:2;
     /* 驾驶员变更 */
     uint8_t alert_faceId:2;
-    uint8_t byte2_recv:6;
+    uint8_t byte2_recv:4;
 
     uint8_t byte3_recv;
     uint8_t byte4_recv;
