@@ -273,6 +273,7 @@ int do_recv_msg(int fd, uint8_t *buf, int count, uint8_t *msg)
 }
 #endif
 
+void printbuf(void *buffer, int len);
 int tcp_rcv(prot_handle *handle)
 {
     int fd = handle->fd;
@@ -310,6 +311,8 @@ int tcp_rcv(prot_handle *handle)
                 handle->close(handle);
                 return -1;
             }else{ /*recv data*/
+                //printf("----------------------recv:");
+                //printbuf(buf, r);
                 handle->rcvlen = r;
                 handle->parse(handle);
             }

@@ -116,6 +116,11 @@ queue<uint8_t> g_uchar_queue;
 //insert mm info 
 void push_mm_queue(InfoForStore *mm)
 {
+    
+#if defined RS232_INTERFACE
+    return;
+#endif
+
     ptr_queue_node header;
     header.buf = NULL;
     header.len = 0;
@@ -306,9 +311,19 @@ int global_var_init()
     sem_send_init();
 #if defined ENABLE_ADAS
     printf("adas device enter!\n");
+#if defined TCP_INTERFACE
+    printf("using tcp!\n");
+#elif defined RS232_INTERFACE
+    printf("using rs232!\n");
+#endif
     read_local_adas_para_file(LOCAL_ADAS_PRAR_FILE);
 #elif defined ENABLE_DMS
     printf("dms device enter!\n");
+#if defined TCP_INTERFACE
+    printf("using tcp!\n");
+#elif defined RS232_INTERFACE
+    printf("using rs232!\n");
+#endif
     read_local_dms_para_file(LOCAL_DMS_PRAR_FILE);
 #endif
 
@@ -2559,7 +2574,6 @@ void handle_distroy(prot_handle *handle)
 //#define RS232_INTERFACE
 int prot_init_pre(prot_handle *phandle)
 {
-    
 #if defined TCP_INTERFACE
     phandle->init = socket_init;
     phandle->close= socket_close;
