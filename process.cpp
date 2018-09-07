@@ -1151,7 +1151,7 @@ int build_dms_warn_frame(int type, uint8_t status_flag, DsmWarnFrame *uploadmsg)
     DmsParaSetting para;
     RealTimeData tmp;
 
-    printf("%s alert happened!\n", adas_alert_type_to_str(type));
+    printf("%s alert happened!\n", dms_alert_type_to_str(type));
 
     read_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
     memset(&mm, 0, sizeof(mm));
