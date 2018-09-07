@@ -19,15 +19,18 @@ using namespace std;
 #define NO_MESSAGE_TO_SEND      1
 #define NO_MESSAGE_TO_SEND      1
 
+#if 1
 typedef struct queue_node_status{
+    uint8_t devid;
     uint8_t cmd;
     uint8_t index;
     uint8_t ack_status;
     uint8_t send_repeat;
     struct timeval send_time;
     MmPacketIndex mm;
-    bool mm_data_trans_waiting;
+    //bool mm_data_trans_waiting;
 }SendStatus;
+#endif
 
 typedef struct _ptr_queue_node{
     uint8_t cmd;
@@ -40,6 +43,7 @@ typedef struct _ptr_queue_node{
     uint8_t *buf;
 } __attribute__((packed)) ptr_queue_node;
 
+#if 0
 typedef struct _package_repeat_status{
 #define REPEAT_SEND_TIMES_MAX   3
     char filepath[100];
@@ -51,7 +55,7 @@ typedef struct _package_repeat_status{
     bool start_wait_ack;
     ptr_queue_node msgsend;
 } __attribute__((packed)) pkg_repeat_status;
-
+#endif
 
 //queue
 int ptr_queue_push(queue<ptr_queue_node *> *p, ptr_queue_node *in,  pthread_mutex_t *lock);

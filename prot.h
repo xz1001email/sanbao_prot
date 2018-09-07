@@ -76,28 +76,28 @@
 
 
 /*****************苏标 SB ********************/
-#define SAMPLE_DEVICE_ID_BRDCST         (0x0)
-#define SAMPLE_DEVICE_ID_ADAS           (0x64)
-#define SAMPLE_DEVICE_ID_DMS            (0x65)
-#define SAMPLE_DEVICE_ID_TPMS           (0x66)
-#define SAMPLE_DEVICE_ID_BSD            (0x67)
+#define DEVICE_ID_BRDCST         (0x0)
+#define DEVICE_ID_ADAS           (0x64)
+#define DEVICE_ID_DMS            (0x65)
+#define DEVICE_ID_TPMS           (0x66)
+#define DEVICE_ID_BSD            (0x67)
 
-#define SAMPLE_CMD_QUERY                (0x2F)
-#define SAMPLE_CMD_FACTORY_RESET        (0x30)
-#define SAMPLE_CMD_SPEED_INFO           (0x31)
-#define SAMPLE_CMD_DEVICE_INFO          (0x32)
-#define SAMPLE_CMD_UPGRADE              (0x33)
-#define SAMPLE_CMD_GET_PARAM            (0x34)
-#define SAMPLE_CMD_SET_PARAM            (0x35)
-#define SAMPLE_CMD_WARNING_REPORT       (0x36)
-#define SAMPLE_CMD_REQ_STATUS           (0x37)
-#define SAMPLE_CMD_UPLOAD_STATUS        (0x38)
-#define SAMPLE_CMD_REQ_MM_DATA          (0x50)
-#define SAMPLE_CMD_UPLOAD_MM_DATA       (0x51)
-#define SAMPLE_CMD_SNAP_SHOT            (0x52)
+#define CMD_QUERY                (0x2F)
+#define CMD_FACTORY_RESET        (0x30)
+#define CMD_SPEED_INFO           (0x31)
+#define CMD_DEVICE_INFO          (0x32)
+#define CMD_UPGRADE              (0x33)
+#define CMD_GET_PARAM            (0x34)
+#define CMD_SET_PARAM            (0x35)
+#define CMD_WARNING_REPORT       (0x36)
+#define CMD_REQ_STATUS           (0x37)
+#define CMD_UPLOAD_STATUS        (0x38)
+#define CMD_REQ_MM_DATA          (0x50)
+#define CMD_UPLOAD_MM_DATA       (0x51)
+#define CMD_SNAP_SHOT            (0x52)
 
-#define SAMPLE_PROT_MAGIC               (0x7E)
-#define SAMPLE_PROT_ESC_CHAR            (0x7D)
+#define PROT_MAGIC               (0x7E)
+#define PROT_ESC_CHAR            (0x7D)
 #define MM_PHOTO 0
 #define MM_AUDIO 1
 #define MM_VIDEO 2
@@ -679,7 +679,7 @@ void *pthread_snap_shot(void *p);
 void *pthread_process_send(void *para);
 
 //para file
-int global_var_init();
+int run_prepare_init();
 void read_dev_para(void *para, uint8_t para_type);
 void write_dev_para(void *para, uint8_t para_type);
 int write_local_adas_para_file(const char* filename);
@@ -743,6 +743,36 @@ typedef struct __prot_handle{
     //int (*do_rest)(LocalConfig *config);
 
 }prot_handle;
+
+
+typedef struct __trackPkg{
+
+#define NO_NEED_ACK 0
+#define NEED_WAIT_ACK 1
+
+    uint8_t devid;
+    /*trans file*/
+    char filename[128];
+    int filesize;
+    char busying;
+    uint16_t index;
+    uint16_t max;
+    uint32_t id;
+    uint8_t type;
+
+
+    uint8_t *data;
+    uint8_t *data_s; /*slip data*/
+
+    MmAckInfo ack;
+
+}trackPkg;
+
+
+
+
+
+
 
 #endif
 

@@ -36,11 +36,48 @@
 using namespace std;
 
 
+trackPkg g_atrack, g_dtrack;
+
+
+int track_info_init(trackPkg *track, uint8_t devid)
+{
+    memset(track, 0, sizeof(trackPkg));
+
+    track->id = devid;
+
+    uint32_t datalen = IMAGE_SIZE_PER_PACKET + sizeof(SBProtHeader) + sizeof(MmAckInfo) + 64;
+    uint32_t datalen_s = datalen*2;
+
+    track->data = (uint8_t *)malloc(datalen);
+    if(!track->data){
+        perror("send image malloc");
+        return -1;
+    }
+    track->data_s = (uint8_t *)malloc(datalen_s);
+    if(!track->data_s){
+        perror("send image malloc");
+        free(track->data);
+        return -1;
+    }
+}
+
+int track_info_destory(trackPkg *track)
+{
+    if(track->data){
+        free(track->data);
+    }
+    if(track->data_s){
+        free(track->data_s);
+    }
+}
+
+
+
 int GetFileSize(char *filename);
 const char *dms_alert_type_to_str(uint8_t type);
 const char *adas_alert_type_to_str(uint8_t type);
 
-static int32_t sample_send_image(uint8_t devid);
+static int32_t sample_send_image(trackPkg *track);
 
 extern volatile int force_exit;
 extern LocalConfig g_configini;
@@ -304,7 +341,7 @@ int record_run_time()
 
 int prot_init_pre(prot_handle *phandle);
 extern LocalConfig g_configini;
-int global_var_init()
+int run_prepare_init()
 {
     memset(&g_configini, 0, sizeof(g_configini));
 
@@ -338,6 +375,10 @@ int global_var_init()
 
     /*init for io process*/
     prot_init_pre(&g_handle);
+
+
+    track_info_init(&g_atrack, DEVICE_ID_ADAS);
+    track_info_init(&g_dtrack, DEVICE_ID_DMS);
 
     return 0;
 }
@@ -517,12 +558,9 @@ void do_serial_num(uint16_t *num, int mode)
     pthread_mutex_unlock(&serial_num_lock);
 }
 
-pkg_repeat_status g_pkg_status;
-pkg_repeat_status *g_pkg_status_p = &g_pkg_status;
 
 void send_stat_pkg_init()
 {
-    memset(g_pkg_status_p, 0, sizeof(pkg_repeat_status));
 }
 
 static uint8_t sample_calc_sum(SBProtHeader *pHeader, int32_t msg_len)
@@ -552,18 +590,18 @@ static int32_t sample_escaple_msg(SBProtHeader *pHeader, int32_t msg_len)
     //ignore head/tail magic
     for (i = 1; i < escaped_len - 1; i++)
     {
-        if (SAMPLE_PROT_MAGIC == barray[i]) 
+        if (PROT_MAGIC == barray[i]) 
         {
             memmove(&barray[i+1], &barray[i], escaped_len - i);
-            barray[i] = SAMPLE_PROT_ESC_CHAR;
+            barray[i] = PROT_ESC_CHAR;
             barray[i+1] = 0x2;
             i++;
             escaped_len ++;
         }
-        else if (SAMPLE_PROT_ESC_CHAR == barray[i]) 
+        else if (PROT_ESC_CHAR == barray[i]) 
         {
             memmove(&barray[i+1], &barray[i], escaped_len - i);
-            barray[i]   = SAMPLE_PROT_ESC_CHAR;
+            barray[i]   = PROT_ESC_CHAR;
             barray[i+1] = 0x1;
             i++;
             escaped_len ++;
@@ -584,23 +622,23 @@ static int32_t message_queue_send(SBProtHeader *pHeader, uint8_t devid, uint8_t 
 
     switch(cmd)
     {
-        case SAMPLE_CMD_QUERY:
-        case SAMPLE_CMD_FACTORY_RESET:
-        case SAMPLE_CMD_SPEED_INFO:        
-        case SAMPLE_CMD_DEVICE_INFO:
-        case SAMPLE_CMD_UPGRADE:
-        case SAMPLE_CMD_GET_PARAM:
-        case SAMPLE_CMD_SET_PARAM:
-        case SAMPLE_CMD_REQ_STATUS:
-        case SAMPLE_CMD_REQ_MM_DATA:
+        case CMD_QUERY:
+        case CMD_FACTORY_RESET:
+        case CMD_SPEED_INFO:        
+        case CMD_DEVICE_INFO:
+        case CMD_UPGRADE:
+        case CMD_GET_PARAM:
+        case CMD_SET_PARAM:
+        case CMD_REQ_STATUS:
+        case CMD_REQ_MM_DATA:
             msg.pkg.ack_status = MSG_ACK_READY;
             MasterIsMe = 0;
             break;
 
             //send as master
-        case SAMPLE_CMD_WARNING_REPORT:
-        case SAMPLE_CMD_UPLOAD_MM_DATA:
-        case SAMPLE_CMD_UPLOAD_STATUS:
+        case CMD_WARNING_REPORT:
+        case CMD_UPLOAD_MM_DATA:
+        case CMD_UPLOAD_STATUS:
             MasterIsMe = 1;
             msg.pkg.ack_status = MSG_ACK_WAITING;
             break;
@@ -611,7 +649,7 @@ static int32_t message_queue_send(SBProtHeader *pHeader, uint8_t devid, uint8_t 
     }
 
     memset(pHeader, 0, sizeof(*pHeader));
-    pHeader->magic = SAMPLE_PROT_MAGIC;
+    pHeader->magic = PROT_MAGIC;
 
     //如果当前发送的数据是主动发送，即需要ACK的，序列号就直接累加
     if(MasterIsMe)
@@ -621,24 +659,21 @@ static int32_t message_queue_send(SBProtHeader *pHeader, uint8_t devid, uint8_t 
 
     pHeader->serial_num= MY_HTONS(serial_num); //used as message cnt
     pHeader->vendor_id= MY_HTONS(VENDOR_ID);
-    //pHeader->device_id= SAMPLE_DEVICE_ID_ADAS;
+    //pHeader->device_id= DEVICE_ID_ADAS;
 
-#if defined ENABLE_ADAS
-    pHeader->device_id= SAMPLE_DEVICE_ID_ADAS;
-#elif defined ENABLE_DMS
-    pHeader->device_id= SAMPLE_DEVICE_ID_DMS;
-#endif
+    pHeader->device_id = devid;
     pHeader->cmd = cmd;
 
     if (payload_len > 0) 
     {
         memcpy(data, payload, payload_len);
     }
-    tail[0] = SAMPLE_PROT_MAGIC;
+    tail[0] = PROT_MAGIC;
 
     pHeader->checksum = sample_calc_sum(pHeader, msg_len);
     msg_len = sample_escaple_msg(pHeader, msg_len);
 
+    msg.pkg.devid = devid;
     msg.pkg.cmd = cmd;
     msg.pkg.index = (s_index++)%0xFF;
     msg.pkg.send_repeat = 0;
@@ -691,7 +726,7 @@ void get_adas_Info_for_store(uint8_t type, InfoForStore *mm_store)
 {
     AdasParaSetting para;
 
-    read_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
+    read_dev_para(&para, DEVICE_ID_ADAS);
     mm_store->warn_type = type;
     switch(type)
     {
@@ -750,7 +785,7 @@ void get_dms_Info_for_store(uint8_t type, InfoForStore *mm_store)
 {
     DmsParaSetting para;
 
-    read_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
+    read_dev_para(&para, DEVICE_ID_DMS);
     mm_store->warn_type = type;
     switch(type)
     {
@@ -845,7 +880,7 @@ int filter_alert_by_speed()
         return 1;   
     }
 
-    read_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
+    read_dev_para(&para, DEVICE_ID_ADAS);
 
     RealTimeDdata_process(&tmp, READ_REAL_TIME_MSG);
 
@@ -1037,7 +1072,7 @@ int build_adas_warn_frame(int type, uint8_t status_flag, AdasWarnFrame *uploadms
     static char s_media_num;
     char logbuf[256];
 
-    read_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
+    read_dev_para(&para, DEVICE_ID_ADAS);
     memset(&mm, 0, sizeof(mm));
     get_adas_Info_for_store(type, &mm);
 
@@ -1134,9 +1169,6 @@ out:
         printf("end media num = %d\n", uploadmsg->mm_num);
     }
 
-    //snprintf(logbuf, sizeof(logbuf), "adas alert frame:%s",g_pkg_status_p->filepath);
-    //data_log(logbuf);
-
     return (sizeof(*uploadmsg) + uploadmsg->mm_num*sizeof(SBMmHeader));
 }
 
@@ -1153,7 +1185,7 @@ int build_dms_warn_frame(int type, uint8_t status_flag, DsmWarnFrame *uploadmsg)
 
     printf("%s alert happened!\n", dms_alert_type_to_str(type));
 
-    read_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
+    read_dev_para(&para, DEVICE_ID_DMS);
     memset(&mm, 0, sizeof(mm));
     get_dms_Info_for_store(type, &mm);
 
@@ -1320,7 +1352,7 @@ void deal_wsi_dms_info(WsiFrame *can)
         }
         if(filter_alert_by_time(&dms_fatigue_warn, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
-            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+            message_queue_send(pSend, DEVICE_ID_DMS,CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
     }
     if ((cur->alert_look_around && !last->alert_look_around) ||\
@@ -1332,7 +1364,7 @@ void deal_wsi_dms_info(WsiFrame *can)
         }
         if(filter_alert_by_time(&dms_distract_warn, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
-            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+            message_queue_send(pSend, DEVICE_ID_DMS,CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
     }
     if(cur->alert_phone && !last->alert_phone){
@@ -1343,7 +1375,7 @@ void deal_wsi_dms_info(WsiFrame *can)
         }
         if(filter_alert_by_time(&dms_calling_warn, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
-            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+            message_queue_send(pSend, DEVICE_ID_DMS,CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
     }
     if(cur->alert_smoking && !last->alert_smoking){
@@ -1354,7 +1386,7 @@ void deal_wsi_dms_info(WsiFrame *can)
         }
         if(filter_alert_by_time(&dms_smoking_warn, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
-            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+            message_queue_send(pSend, DEVICE_ID_DMS,CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
     }
     if(cur->alert_absence && !last->alert_absence){
@@ -1365,7 +1397,7 @@ void deal_wsi_dms_info(WsiFrame *can)
         }
         if(filter_alert_by_time(&dms_abnormal_warn, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
-            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+            message_queue_send(pSend, DEVICE_ID_DMS,CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
     }
     //add faceId
@@ -1377,7 +1409,7 @@ void deal_wsi_dms_info(WsiFrame *can)
         }
         if(filter_alert_by_time(&dms_driver_change, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
-            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+            message_queue_send(pSend, DEVICE_ID_DMS,CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
     }
 
@@ -1458,8 +1490,8 @@ void deal_wsi_dms_info2(dms_can_779 *msg)
     WSI_DEBUG("dms alert frame len = %ld\n", sizeof(*uploadmsg));
     printbuf((uint8_t *)uploadmsg, playloadlen);
     message_queue_send(pSend, \
-            SAMPLE_DEVICE_ID_DMS,\
-            SAMPLE_CMD_WARNING_REPORT,\
+            DEVICE_ID_DMS,\
+            CMD_WARNING_REPORT,\
             (uint8_t *)uploadmsg,\
             playloadlen);
 
@@ -1469,6 +1501,18 @@ out:
 }
 
 #endif
+
+
+
+void clear_trans_status(uint8_t devid)
+{
+    if(devid == DEVICE_ID_ADAS)
+        g_atrack.busying = 0;
+    else if(devid == DEVICE_ID_DMS)
+        g_dtrack.busying = 0;
+}
+
+
 
 #define TCP_SEND_TIMEOUT 1
 static int send_package(prot_handle *handle)
@@ -1536,7 +1580,8 @@ static int send_package(prot_handle *handle)
             }
             if(header.pkg.send_repeat >= 3){//第一次发送
                 printf("send three times..\n");
-                g_pkg_status_p->mm_data_trans_waiting = 0;
+                clear_trans_status(header.pkg.devid);
+                //g_pkg_status_p->mm_data_trans_waiting = 0;
                 break;
             }
         }
@@ -1578,7 +1623,7 @@ void send_snap_shot_ack(SBProtHeader *pHeader, int32_t len)
     SBProtHeader *pSend = (SBProtHeader *) txbuf;
 
     if(len == sizeof(SBProtHeader) + 1){
-        message_queue_send(pSend, pHeader->device_id, SAMPLE_CMD_SNAP_SHOT, (uint8_t *)&ack, 1);
+        message_queue_send(pSend, pHeader->device_id, CMD_SNAP_SHOT, (uint8_t *)&ack, 1);
     }else{
         printf("recv cmd:0x%x, data len maybe error!\n", pHeader->cmd);
     }
@@ -1595,8 +1640,8 @@ int do_snap_shot()
     DsmWarnFrame *uploadmsg = (DsmWarnFrame *)&msgbuf[0];
     playloadlen = build_dms_warn_frame(DMS_SANPSHOT_EVENT, SB_WARN_STATUS_NONE, uploadmsg);
     message_queue_send(pSend, \
-            SAMPLE_DEVICE_ID_DMS,\
-            SAMPLE_CMD_WARNING_REPORT,\
+            DEVICE_ID_DMS,\
+            CMD_WARNING_REPORT,\
             (uint8_t *)uploadmsg,\
             playloadlen);
 
@@ -1605,8 +1650,8 @@ int do_snap_shot()
     playloadlen = build_adas_warn_frame(SB_WARN_TYPE_SNAP, SB_WARN_STATUS_NONE, uploadmsg);
     printf("snap len = %d\n", playloadlen);
     message_queue_send(pSend, \
-            SAMPLE_DEVICE_ID_ADAS,\
-            SAMPLE_CMD_WARNING_REPORT,\
+            DEVICE_ID_ADAS,\
+            CMD_WARNING_REPORT,\
             (uint8_t *)uploadmsg,\
             playloadlen);
 #endif
@@ -1717,7 +1762,7 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                         uploadmsg->ldw_type = SOUND_TYPE_RLDW;
 
                     WSI_DEBUG("send LDW alert message!\n");
-                    message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
+                    message_queue_send(pSend,DEVICE_ID_ADAS, CMD_WARNING_REPORT,\
                             (uint8_t *)uploadmsg, \
                             playloadlen);
                 }
@@ -1736,7 +1781,7 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                     uploadmsg->sound_type = SB_WARN_TYPE_FCW;
 
                     WSI_DEBUG("send FCW alert message!\n");
-                    message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
+                    message_queue_send(pSend,DEVICE_ID_ADAS, CMD_WARNING_REPORT,\
                             (uint8_t *)uploadmsg, \
                             playloadlen);
                 }
@@ -1756,7 +1801,7 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
                     //uploadmsg->status_flag = SB_WARN_STATUS_BEGIN;
                     uploadmsg->sound_type = SB_WARN_TYPE_HW;
                     WSI_DEBUG("send HW alert message!\n");
-                    message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
+                    message_queue_send(pSend,DEVICE_ID_ADAS, CMD_WARNING_REPORT,\
                             (uint8_t *)uploadmsg, \
                             playloadlen);
                 }
@@ -1775,7 +1820,7 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
 
                     playloadlen = build_adas_warn_frame(SB_WARN_TYPE_HW, SB_WARN_STATUS_BEGIN, uploadmsg);
                     WSI_DEBUG("send HW alert start message!\n");
-                    message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
+                    message_queue_send(pSend,DEVICE_ID_ADAS, CMD_WARNING_REPORT,\
                             (uint8_t *)uploadmsg, \
                             playloadlen);
 #if 0
@@ -1795,7 +1840,7 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
 #endif
                 playloadlen = build_adas_warn_frame(SB_WARN_TYPE_HW, SB_WARN_STATUS_END, uploadmsg);
                 WSI_DEBUG("send HW alert end message!\n");
-                message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_WARNING_REPORT,\
+                message_queue_send(pSend,DEVICE_ID_ADAS, CMD_WARNING_REPORT,\
                         (uint8_t *)uploadmsg,\
                         playloadlen);
 #if 0
@@ -1848,21 +1893,6 @@ int deal_wsi_adas_can760(WsiFrame *sourcecan)
 }
 
 
-int find_local_image_name(uint8_t type, uint32_t id, char *filepath)
-{
-    MmInfo_node node;
-#if 0
-    //查找本地多媒体文件
-    if(find_mm_resource(id, &node))
-    {
-        printf("find id[%d] fail!\n", id);
-        return -1;
-    }
-#endif
-    mmid_to_filename(id, type, filepath);
-    return GetFileSize(filepath);
-}
-
 int GetFileSize(char *filename)
 {
     int filesize = 0;
@@ -1888,59 +1918,64 @@ int GetFileSize(char *filename)
     return filesize;
 }
 
-//发送多媒体请求应答
-static int32_t send_mm_req_ack(SBProtHeader *pHeader, int len)
+void track_info_dump(trackPkg *track)
 {
-    uint32_t mm_id = 0;
-    uint8_t mm_type = 0;
-    int32_t filesize = 0;
+    printf("------------------track dump------------------\n");
+    printf("track->id = %010u\n", track->id);
+    printf("track->type = %010u\n", track->type);
+    printf("track->index = %010u\n", track->index);
+
+    printf("track->devid = 0x%x\n", track->devid);
+    printf("track->filename = %s\n", track->filename);
+}
+void record_file_info(trackPkg *track)
+{
+#ifdef USING_OLD_PATH
+    snprintf(track->filename, sizeof(track->filename),"%s%010u", SNAP_SHOT_JPEG_PATH, track->id);
+#else
+    snprintf(track->filename, sizeof(track->filename),"%s%010u", snap_path, track->id);
+#endif
+
+    track->filesize = GetFileSize(track->filename);
+    track->index = 0;
+    track->max = (track->filesize + IMAGE_SIZE_PER_PACKET - 1)/IMAGE_SIZE_PER_PACKET;
+}
+
+#define REQ_MEDIA_CMD_CORRECT(len)   (len == sizeof(SBMmHeader) + sizeof(SBProtHeader) + 1)
+static int32_t reply_request_media(SBProtHeader *pHeader, int len, trackPkg *track)
+{
     SBMmHeader *mm_ptr = NULL;
-    SBMmHeader2 send_mm;
     int ret = 0;
     char logbuf[256];
 
-    if(pHeader->cmd == SAMPLE_CMD_REQ_MM_DATA && !g_pkg_status_p->mm_data_trans_waiting) //recv req
+    if(!track->busying) //recv req
     {
         printf("------------req mm-------------\n");
-        printbuf((uint8_t *)pHeader, len);
-        //检查接收幀的完整性
-        if(len != sizeof(SBMmHeader) + sizeof(SBProtHeader) + 1){
-            printf("recv cmd:0x%x, data len maybe error[%d]/[%ld]!\n", \
-                    pHeader->cmd, len,\
-                    sizeof(SBMmHeader) + sizeof(SBProtHeader) + 1);
+        if(!REQ_MEDIA_CMD_CORRECT(len)){
+            printf("req cmd frame len error!");
             return -1;
         }
+
         mm_ptr = (SBMmHeader *)(pHeader + 1);
+        track->id = MY_NTOHL(mm_ptr->id);
+        track->type = mm_ptr->type;
+        track->devid = pHeader->device_id;
+        record_file_info(track);
+        track_info_dump(track);
 
-        mm_id = MY_NTOHL(mm_ptr->id);
-        mm_type = mm_ptr->type;
-        printf("req mm_type = %d\n", mm_type);
-        printf("req mm_id = %10u\n", mm_id);
-
-        filesize = find_local_image_name(mm_type, mm_id,  g_pkg_status_p->filepath);
-        snprintf(logbuf, sizeof(logbuf), "try find file:%s",g_pkg_status_p->filepath);
+        snprintf(logbuf, sizeof(logbuf), "find file:%s", track->filename);
         data_log(logbuf);
-
-        if(filesize > 0){//media found
+        if(track->filesize > 0){//media found
+            track->busying = 1;
             printf("find file ok!\n");
-            //send ack
-            message_queue_send(pHeader,pHeader->device_id, SAMPLE_CMD_REQ_MM_DATA, NULL, 0);
-            g_pkg_status_p->mm_data_trans_waiting = 1;
-
-            //记录当前包的信息, 发送应答
-            g_pkg_status_p->mm.type = mm_type;
-            g_pkg_status_p->mm.id = mm_id;
-            g_pkg_status_p->mm.packet_index = 0;
-            g_pkg_status_p->mm.packet_total_num = (filesize + IMAGE_SIZE_PER_PACKET - 1)/IMAGE_SIZE_PER_PACKET;
-
-            //send first package
+            message_queue_send(pHeader, track->devid, CMD_REQ_MM_DATA, NULL, 0); /* send ack*/
             printf("send first package!\n");
-            sample_send_image(pHeader->device_id);
+            sample_send_image(track);
         }else{
             printf("find file fail!\n");
         }
     }else{
-        printf("current package is not valid!\n");
+        printf("***trans busying***\n");
         return -1;
     }
     return 0;
@@ -1960,119 +1995,100 @@ void clear_old_media(uint32_t id)
     s_last_id = id;
 }
 
-static int recv_ack_and_send_image(SBProtHeader *pHeader, int32_t len)
+void do_last_ack(trackPkg *track)
 {
-    SendStatus pkg;
-    MmAckInfo mmack;
-    uint32_t id;
     char logbuf[256];
+    track->busying = 0;
+    printf("transmit one file over!\n");
+    snprintf(logbuf, sizeof(logbuf), "transmited file:%s", track->filename);
+    data_log(logbuf);
 
-    //WSI_DEBUG("recv ack...........!\n");
-    memcpy(&mmack, pHeader+1, sizeof(mmack));
-    if(mmack.ack){
-        printf("recv ack err!\n");
-        return -1;
+    delete_mm_resource(track->id);
+    //clear_old_media(id);
+    //display_mm_resource();
+}
+
+#define ACK_ERR         0
+#define ACK_OK          1
+#define ACK_LAST_ONE    2
+int check_ack(trackPkg *track)
+{
+    MmAckInfo *ack = &track->ack;
+    if(ack->ack){ /*ack error*/
+        printf("recv ack err!!!\n");
+        return ACK_ERR;
     }else{
-        WSI_DEBUG("send pkg index = 0x%08x, recv ack index = 0x%08x\n",\
-                g_pkg_status_p->mm.packet_index, MY_NTOHS(mmack.packet_index));
-
-        //recv ack index is correct
-        if(g_pkg_status_p->mm.packet_index == MY_NTOHS(mmack.packet_index) + 1){
-            //改变发送包，接收ACK状态为ready
-            notice_ack_msg();
-
-            //最后一个ACK
-            if(g_pkg_status_p->mm.packet_total_num == g_pkg_status_p->mm.packet_index){
-                g_pkg_status_p->mm_data_trans_waiting = 0;
-                printf("transmit one file over!\n");
-                snprintf(logbuf, sizeof(logbuf), "transmit file over:%s",\
-                        g_pkg_status_p->filepath);
-                data_log(logbuf);
-
-                id = g_pkg_status_p->mm.id;
-                delete_mm_resource(id);
-                //clear_old_media(id);
-                //display_mm_resource();
+        if(track->index == MY_NTOHS(ack->packet_index)){
+            if(track->max == track->index + 1){ /*send over*/
+                printf("recv last ack \n");
+                return ACK_LAST_ONE;
             }else{
-                sample_send_image(pHeader->device_id);
+                printf("recv ack ok\n");
+                return ACK_OK;
             }
-        }else{
-            printf("recv package index error!\n");
+        }else{ /*index error*/
+            printf("recv index async!!!\n");
+            return ACK_ERR;
         }
+    }
+}
+
+static int ack_process(SBProtHeader *pHeader, int32_t len, trackPkg *track)
+{
+    int ret;
+
+    memcpy(&track->ack, pHeader+1, sizeof(MmAckInfo));
+    ret = check_ack(track);
+    if(ret == ACK_ERR){
+        return -1;
+    }else if(ret == ACK_OK){
+        notice_ack_msg(); /*notice send pthread*/ 
+        track->index ++; 
+        sample_send_image(track);
+    }else if(ret == ACK_LAST_ONE){
+        notice_ack_msg(); /*notice send pthread*/ 
+        do_last_ack(track);
     }
     return 0;
 }
 
-static int32_t sample_send_image(uint8_t devid)
+static int32_t sample_send_image(trackPkg *track)
 {
     int ret=0;
     int offset=0;
-    uint32_t retval = 0;
-    uint8_t *data=NULL;
-    uint8_t *txbuf=NULL;
-    uint32_t datalen=0;
-    uint32_t txbuflen=0;
+    uint8_t *data=track->data;
     MmPacketIndex trans_mm;
-
-    size_t filesize = 0;
     FILE *fp = NULL;
     SBProtHeader *pSend = NULL;
 
-    datalen = IMAGE_SIZE_PER_PACKET + \
-        sizeof(SBProtHeader) + sizeof(MmAckInfo) + 64;
-    txbuflen = (IMAGE_SIZE_PER_PACKET + \
-            sizeof(SBProtHeader) + sizeof(MmAckInfo) + 64)*2;
+    track_info_dump(track);
 
-    data = (uint8_t *)malloc(datalen);
-    if(!data){
-        perror("send image malloc");
-        retval = 1;
-        goto out;
-    }
-    txbuf = (uint8_t *)malloc(txbuflen);
-    if(!txbuf){
-        perror("send image malloc");
-        retval = 1;
-        goto out;
-    }
-
-    pSend = (SBProtHeader *) txbuf;
-    mmid_to_filename(g_pkg_status_p->mm.id, g_pkg_status_p->mm.type, g_pkg_status_p->filepath);
-    fp = fopen(g_pkg_status_p->filepath, "rb");
+    pSend = (SBProtHeader *) track->data_s;
+    fp = fopen(track->filename, "rb");
     if(fp ==NULL){
-        printf("open %s fail\n", g_pkg_status_p->filepath);
-        retval = -1;
-        goto out;
+        printf("open %s fail\n", track->filename);
+        return -1;
     }
-    trans_mm.type = g_pkg_status_p->mm.type;
-    trans_mm.id = MY_HTONL(g_pkg_status_p->mm.id);
-    trans_mm.packet_index = MY_HTONS(g_pkg_status_p->mm.packet_index);
-    trans_mm.packet_total_num = MY_HTONS(g_pkg_status_p->mm.packet_total_num);
+    trans_mm.type = track->type;
+    trans_mm.id = MY_HTONL(track->id);
+    trans_mm.packet_index = MY_HTONS(track->index);
+    trans_mm.packet_total_num = MY_HTONS(track->max);
 
     memcpy(data, &trans_mm, sizeof(trans_mm));
-    offset = g_pkg_status_p->mm.packet_index * IMAGE_SIZE_PER_PACKET;
+    offset = track->index * IMAGE_SIZE_PER_PACKET;
     fseek(fp, offset, SEEK_SET);
-    ret = fread(data + sizeof(g_pkg_status_p->mm), 1, IMAGE_SIZE_PER_PACKET, fp);
+    ret = fread(data + sizeof(MmPacketIndex), 1, IMAGE_SIZE_PER_PACKET, fp);
     fclose(fp);
     if(ret>0){
-        message_queue_send(pSend,SAMPLE_DEVICE_ID_ADAS, SAMPLE_CMD_UPLOAD_MM_DATA, \
-                data, (sizeof(g_pkg_status_p->mm) + ret));
-        //printbuf(data, 64);
-        WSI_DEBUG("send...[%d/%d]\n", g_pkg_status_p->mm.packet_total_num,\
-                g_pkg_status_p->mm.packet_index);
-        g_pkg_status_p->mm.packet_index += 1; 
-    }else{//end and clear
+        message_queue_send(pSend, track->devid, CMD_UPLOAD_MM_DATA, \
+                data, (sizeof(MmPacketIndex) + ret));
+        WSI_DEBUG("send...[%d/%d]\n", track->index, track->max);
+    }else{ /*end and clear*/
         printf("read file ret <=0\n");
         perror("error: read image file:");
     }
 
-out:
-    if(data)
-        free(data);
-    if(txbuf)
-        free(txbuf);
-
-    return retval;
+    return 0;
 }
 
 void write_RealTimeData(SBProtHeader *pHeader, int32_t len)
@@ -2093,11 +2109,11 @@ void write_RealTimeData(SBProtHeader *pHeader, int32_t len)
 
 void do_factory_reset(uint8_t dev_id)
 {
-    if(dev_id == SAMPLE_DEVICE_ID_ADAS){
+    if(dev_id == DEVICE_ID_ADAS){
         set_AdasParaSetting_default();
         write_local_adas_para_file(LOCAL_ADAS_PRAR_FILE);
 
-    }else if(dev_id == SAMPLE_DEVICE_ID_DMS){
+    }else if(dev_id == DEVICE_ID_DMS){
         set_DmsParaSetting_default();
         write_local_dms_para_file(LOCAL_DMS_PRAR_FILE);
     }
@@ -2113,7 +2129,7 @@ void recv_para_setting(SBProtHeader *pHeader, int32_t len)
     SBProtHeader *pSend = (SBProtHeader *) txbuf;
     int ret = -1;
 
-    if(pHeader->device_id == SAMPLE_DEVICE_ID_ADAS){
+    if(pHeader->device_id == DEVICE_ID_ADAS){
 
         if(len == sizeof(SBProtHeader) + 1 + sizeof(recv_adas_para)){
             memcpy(&recv_adas_para, pHeader+1, sizeof(recv_adas_para));
@@ -2121,7 +2137,7 @@ void recv_para_setting(SBProtHeader *pHeader, int32_t len)
             //大端传输
             recv_adas_para.auto_photo_time_period = MY_NTOHS(recv_adas_para.auto_photo_time_period);
             recv_adas_para.auto_photo_distance_period = MY_NTOHS(recv_adas_para.auto_photo_distance_period);
-            write_dev_para(&recv_adas_para, SAMPLE_DEVICE_ID_ADAS);
+            write_dev_para(&recv_adas_para, DEVICE_ID_ADAS);
 
             printf("recv adas para...\n");
             print_adas_para(&recv_adas_para);
@@ -2130,7 +2146,7 @@ void recv_para_setting(SBProtHeader *pHeader, int32_t len)
         }else{
             printf("recv cmd:0x%x, adas data len=%d maybe error!\n",len, pHeader->cmd);
         }
-    }else if(pHeader->device_id == SAMPLE_DEVICE_ID_DMS){
+    }else if(pHeader->device_id == DEVICE_ID_DMS){
         if(len == sizeof(SBProtHeader) + 1 + sizeof(recv_dms_para)){
             memcpy(&recv_dms_para, pHeader+1, sizeof(recv_dms_para));
 
@@ -2143,7 +2159,7 @@ void recv_para_setting(SBProtHeader *pHeader, int32_t len)
             printf("recv dms para...\n");
             print_dms_para(&recv_dms_para);
 
-            write_dev_para(&recv_dms_para, SAMPLE_DEVICE_ID_DMS);
+            write_dev_para(&recv_dms_para, DEVICE_ID_DMS);
             ret = write_local_dms_para_file(LOCAL_DMS_PRAR_FILE);
 
         }else{
@@ -2167,10 +2183,10 @@ void recv_para_setting(SBProtHeader *pHeader, int32_t len)
     //设置参数成功
     if(!ret){
         ack = 0;
-        message_queue_send(pSend, pHeader->device_id, SAMPLE_CMD_SET_PARAM, (uint8_t*)&ack, 1);
+        message_queue_send(pSend, pHeader->device_id, CMD_SET_PARAM, (uint8_t*)&ack, 1);
     }else{
         ack = 1;
-        message_queue_send(pSend, pHeader->device_id, SAMPLE_CMD_SET_PARAM, \
+        message_queue_send(pSend, pHeader->device_id, CMD_SET_PARAM, \
                 (uint8_t*)&ack, 1);
     }
 }
@@ -2184,20 +2200,20 @@ void send_para_setting(SBProtHeader *pHeader, int32_t len)
 
     if(len == sizeof(SBProtHeader) + 1)
     {
-        if(pHeader->device_id == SAMPLE_DEVICE_ID_ADAS){
-            read_dev_para(&send_adas_para, SAMPLE_DEVICE_ID_ADAS);
+        if(pHeader->device_id == DEVICE_ID_ADAS){
+            read_dev_para(&send_adas_para, DEVICE_ID_ADAS);
             send_adas_para.auto_photo_time_period = MY_HTONS(send_adas_para.auto_photo_time_period);
             send_adas_para.auto_photo_distance_period = MY_HTONS(send_adas_para.auto_photo_distance_period);
-            message_queue_send(pSend,pHeader->device_id, SAMPLE_CMD_GET_PARAM, \
+            message_queue_send(pSend,pHeader->device_id, CMD_GET_PARAM, \
                     (uint8_t*)&send_adas_para, sizeof(send_adas_para));
 
-        }else if(pHeader->device_id == SAMPLE_DEVICE_ID_DMS){
-            read_dev_para(&send_dms_para, SAMPLE_DEVICE_ID_DMS);
+        }else if(pHeader->device_id == DEVICE_ID_DMS){
+            read_dev_para(&send_dms_para, DEVICE_ID_DMS);
             send_dms_para.auto_photo_time_period = MY_HTONS(send_dms_para.auto_photo_time_period);
             send_dms_para.auto_photo_distance_period = MY_HTONS(send_dms_para.auto_photo_distance_period);
             send_dms_para.Smoke_TimeIntervalThreshold = MY_HTONS(send_dms_para.Smoke_TimeIntervalThreshold);
             send_dms_para.Call_TimeIntervalThreshold = MY_HTONS(send_dms_para.Call_TimeIntervalThreshold);
-            message_queue_send(pSend, pHeader->device_id, SAMPLE_CMD_GET_PARAM, \
+            message_queue_send(pSend, pHeader->device_id, CMD_GET_PARAM, \
                     (uint8_t*)&send_dms_para, sizeof(send_dms_para));
         }
     }else{
@@ -2207,7 +2223,6 @@ void send_para_setting(SBProtHeader *pHeader, int32_t len)
 
 void recv_warning_ack(SBProtHeader *pHeader, int32_t len)
 {
-    SendStatus pkg;
 
     if(len == sizeof(SBProtHeader) + 1){
         printf("push warning ack!\n");
@@ -2228,7 +2243,7 @@ void send_work_status_req_ack(SBProtHeader *pHeader, int32_t len)
 
     if(len == sizeof(SBProtHeader) + 1){
         module.work_status = MODULE_WORKING;
-        message_queue_send(pSend, pHeader->device_id, SAMPLE_CMD_REQ_STATUS, \
+        message_queue_send(pSend, pHeader->device_id, CMD_REQ_STATUS, \
                 (uint8_t*)&module, sizeof(module));
     }else{
         printf("recv cmd:0x%x, data len maybe error!\n", pHeader->cmd);
@@ -2238,9 +2253,9 @@ void send_work_status()
 {
     uint8_t devid=0;
 #if defined ENABLE_ADAS
-    devid = SAMPLE_DEVICE_ID_ADAS;
+    devid = DEVICE_ID_ADAS;
 #elif defined ENABLE_DMS
-    devid = SAMPLE_DEVICE_ID_DMS;
+    devid = DEVICE_ID_DMS;
 #endif
 
     ModuleStatus module;
@@ -2249,13 +2264,12 @@ void send_work_status()
 
     memset(&module, 0, sizeof(module));
     module.work_status = MODULE_WORKING;
-    message_queue_send(pSend, devid, SAMPLE_CMD_REQ_STATUS, \
+    message_queue_send(pSend, devid, CMD_REQ_STATUS, \
             (uint8_t*)&module, sizeof(module));
 }
 
 void recv_upload_status_cmd_ack(SBProtHeader *pHeader, int32_t len)
 {
-    SendStatus pkg;
 
     if(len == sizeof(SBProtHeader) + 1){
         notice_ack_msg();
@@ -2322,7 +2336,7 @@ int recv_upgrade_file(SBProtHeader *pHeader, int32_t len)
             //do run, do upgrade
             ack[0] = message_id;
             ack[1] = 0;
-            message_queue_send(pSend,pHeader->device_id, SAMPLE_CMD_UPGRADE, \
+            message_queue_send(pSend,pHeader->device_id, CMD_UPGRADE, \
                     ack, sizeof(ack));
 
             printf("exe new app...\n");
@@ -2336,7 +2350,7 @@ int recv_upgrade_file(SBProtHeader *pHeader, int32_t len)
         }
         ack[0] = message_id;
         ack[1] = 0;
-        message_queue_send(pSend,pHeader->device_id, SAMPLE_CMD_UPGRADE, \
+        message_queue_send(pSend,pHeader->device_id, CMD_UPGRADE, \
                 ack, sizeof(ack));
     }
     else if(message_id == UPGRADE_CMD_TRANS) //recv file
@@ -2391,14 +2405,14 @@ int recv_upgrade_file(SBProtHeader *pHeader, int32_t len)
                     data_ack[5] = 1;
                 }
                 memcpy(data_ack, pchar, 5);
-                message_queue_send(pSend,pHeader->device_id, SAMPLE_CMD_UPGRADE, \
+                message_queue_send(pSend,pHeader->device_id, CMD_UPGRADE, \
                         data_ack, sizeof(data_ack));
                 return 0;
             }
         }
         memcpy(data_ack, pchar, 5);
         data_ack[5] = 0;
-        message_queue_send(pSend,pHeader->device_id, SAMPLE_CMD_UPGRADE, \
+        message_queue_send(pSend,pHeader->device_id, CMD_UPGRADE, \
                 data_ack, sizeof(data_ack));
     }
     else
@@ -2423,78 +2437,90 @@ static int32_t sample_on_cmd(SBProtHeader *pHeader, int32_t len)
     uint8_t txbuf[128] = {0};
     SBProtHeader *pSend = (SBProtHeader *) txbuf;
 
-#if defined ENABLE_ADAS
-    if(pHeader->device_id != SAMPLE_DEVICE_ID_ADAS &&\
-            pHeader->device_id != SAMPLE_DEVICE_ID_BRDCST)
-        return 0;
-
-#elif defined ENABLE_DMS
-    if((pHeader->device_id != SAMPLE_DEVICE_ID_DMS) && (pHeader->device_id != SAMPLE_DEVICE_ID_BRDCST)){
-        return 0;
+    if(pHeader->device_id == DEVICE_ID_BRDCST){
+        if(pHeader->cmd != CMD_QUERY){
+            printf("-----------unknow device frame---------------\n");
+            printbuf(pHeader, len);
+            return -1;
+        }
+    }else{
+        if(pHeader->device_id != DEVICE_ID_ADAS && pHeader->device_id != DEVICE_ID_DMS){ /*quit cond*/
+            printf("-----------unknow device frame---------------\n");
+            printbuf(pHeader, len);
+            return -1;
+        }
     }
-#else
-    printf("no defien device.\n");
-    return 0;
-#endif
+
     serial_num = MY_HTONS(pHeader->serial_num);
     do_serial_num(&serial_num, RECORD_RECV_NUM);
 
     printf("------cmd = 0x%x------\n", pHeader->cmd);
+    printbuf(pHeader, len);
     switch (pHeader->cmd)
     {
-        case SAMPLE_CMD_QUERY:
-            message_queue_send(pHeader,pHeader->device_id, SAMPLE_CMD_QUERY, NULL, 0);
+        case CMD_QUERY:
+            if(pHeader->device_id == DEVICE_ID_BRDCST){
+                message_queue_send(pHeader, DEVICE_ID_ADAS, CMD_QUERY, NULL, 0);
+                message_queue_send(pHeader, DEVICE_ID_DMS, CMD_QUERY, NULL, 0);
+            }else{
+                message_queue_send(pHeader,pHeader->device_id, CMD_QUERY, NULL, 0);
+            }
             break;
 
-        case SAMPLE_CMD_FACTORY_RESET:
-            message_queue_send(pHeader,pHeader->device_id, SAMPLE_CMD_FACTORY_RESET, NULL, 0);
+        case CMD_FACTORY_RESET:
+            message_queue_send(pHeader,pHeader->device_id, CMD_FACTORY_RESET, NULL, 0);
             do_factory_reset(pHeader->device_id);
             break;
 
-        case SAMPLE_CMD_SPEED_INFO: //不需要应答
+        case CMD_SPEED_INFO: //不需要应答
             write_RealTimeData(pHeader, len);
             heart_beat_process(HEART_BEAT_ALIVE, WRITE_MSG);
             break;
 
-        case SAMPLE_CMD_DEVICE_INFO:
-            message_queue_send(pSend,pHeader->device_id, SAMPLE_CMD_DEVICE_INFO,
+        case CMD_DEVICE_INFO:
+            message_queue_send(pSend,pHeader->device_id, CMD_DEVICE_INFO,
                     (uint8_t*)&dev_info, sizeof(dev_info));
             break;
 
-        case SAMPLE_CMD_UPGRADE:
+        case CMD_UPGRADE:
             recv_upgrade_file(pHeader, len);
             break;
 
-        case SAMPLE_CMD_GET_PARAM:
+        case CMD_GET_PARAM:
             send_para_setting(pHeader, len);
             break;
 
-        case SAMPLE_CMD_SET_PARAM:
+        case CMD_SET_PARAM:
             recv_para_setting(pHeader, len);
             break;
 
-        case SAMPLE_CMD_WARNING_REPORT: //recv warning ack
+        case CMD_WARNING_REPORT: //recv warning ack
             recv_warning_ack(pHeader, len);
             break;
 
-        case SAMPLE_CMD_REQ_STATUS: 
+        case CMD_REQ_STATUS: 
             send_work_status_req_ack(pHeader, len);
             break;
 
-        case SAMPLE_CMD_UPLOAD_STATUS: //主动上报状态后，接收到ack
+        case CMD_UPLOAD_STATUS: //主动上报状态后，接收到ack
             recv_upload_status_cmd_ack(pHeader, len);
             break;
 
-        case SAMPLE_CMD_REQ_MM_DATA:
-            //发送多媒体请求应答
-            send_mm_req_ack(pHeader,len);
+        case CMD_REQ_MM_DATA:
+            if(pHeader->device_id == DEVICE_ID_ADAS)
+                reply_request_media(pHeader,len, &g_atrack); /*应答请求*/
+            else if(pHeader->device_id == DEVICE_ID_DMS)
+                reply_request_media(pHeader,len, &g_dtrack);
             break;
 
-        case SAMPLE_CMD_UPLOAD_MM_DATA:
-            recv_ack_and_send_image(pHeader, len);
+        case CMD_UPLOAD_MM_DATA:
+            if(pHeader->device_id == DEVICE_ID_ADAS)
+                ack_process(pHeader, len, &g_atrack);
+            else if(pHeader->device_id == DEVICE_ID_DMS)
+                ack_process(pHeader, len, &g_dtrack);
             break;
 
-        case SAMPLE_CMD_SNAP_SHOT:
+        case CMD_SNAP_SHOT:
             WSI_DEBUG("------snap shot----------\n");
             send_snap_shot_ack(pHeader, len);
             do_snap_shot();
@@ -2514,7 +2540,6 @@ void prot_parse(prot_handle *handle)
     uint8_t sum = 0;
     uint32_t framelen = 0;
     int i = 0;
-
 
     uint8_t *buf = handle->rcvData_s;
     uint8_t *msgbuf = handle->rcvData;
@@ -2550,7 +2575,6 @@ void tcp_socket_close(prot_handle *handle)
 }
 void do_stat_reset()
 {
-    g_pkg_status_p->mm_data_trans_waiting = 0;
     send_stat_pkg_init();
     clear_queue();
 }
@@ -2647,8 +2671,7 @@ connect_again:
         send_work_status();
 
         while(!force_exit){
-            //printf("fd = %d\n", g_handle.fd);
-            ret = g_handle.rcv(&g_handle);
+            ret = g_handle.rcv(&g_handle); /*do recv*/
             if(ret < 0){
                 goto connect_again;
                 break;
@@ -2685,17 +2708,17 @@ static uint32_t unescaple_msg(uint8_t *buf, uint8_t *msg, int msglen)
     //printf("ch = 0x%x\n", buf[0]);
     //not recv head
     if(!get_head){
-        if((ch == SAMPLE_PROT_MAGIC) && (cnt == 0)){
-            msg[cnt] = SAMPLE_PROT_MAGIC;
+        if((ch == PROT_MAGIC) && (cnt == 0)){
+            msg[cnt] = PROT_MAGIC;
             cnt++;
             get_head = 1;
             return 0;
         }
     }else{//recv head
-        if((ch == SAMPLE_PROT_MAGIC) && (cnt > 0)) {//get tail
+        if((ch == PROT_MAGIC) && (cnt > 0)) {//get tail
             if(cnt < 6){//maybe error frame, as header, restart
                 cnt = 0;
-                msg[cnt] = SAMPLE_PROT_MAGIC;
+                msg[cnt] = PROT_MAGIC;
                 cnt++;
                 get_head = 1;
 
@@ -2703,7 +2726,7 @@ static uint32_t unescaple_msg(uint8_t *buf, uint8_t *msg, int msglen)
                 return 0;
 
             }else{ //success
-                msg[cnt] = SAMPLE_PROT_MAGIC;
+                msg[cnt] = PROT_MAGIC;
                 get_head = 0;//over
                 cnt++;
                 framelen = cnt;
@@ -2712,15 +2735,15 @@ static uint32_t unescaple_msg(uint8_t *buf, uint8_t *msg, int msglen)
                 return framelen;
             }
         }else{//get text
-            if((ch == SAMPLE_PROT_ESC_CHAR) && !got_esc_char){//need deal
+            if((ch == PROT_ESC_CHAR) && !got_esc_char){//need deal
                 got_esc_char = 1;
                 msg[cnt] = ch;
                 cnt++;
             }else if(got_esc_char && (ch == 0x02)){
-                msg[cnt-1] = SAMPLE_PROT_MAGIC;
+                msg[cnt-1] = PROT_MAGIC;
                 got_esc_char = 0;
             }else if(got_esc_char && (ch == 0x01)){
-                msg[cnt-1] = SAMPLE_PROT_ESC_CHAR;
+                msg[cnt-1] = PROT_ESC_CHAR;
                 got_esc_char = 0;
             }else{
                 msg[cnt] = ch;
@@ -2739,10 +2762,10 @@ void *pthread_snap_shot(void *p)
 {
 #ifdef ENABLE_ADAS
     AdasParaSetting tmp;
-    uint8_t para_type = SAMPLE_DEVICE_ID_ADAS;
+    uint8_t para_type = DEVICE_ID_ADAS;
 #else
     DmsParaSetting tmp;
-    uint8_t para_type = SAMPLE_DEVICE_ID_DMS;
+    uint8_t para_type = DEVICE_ID_DMS;
 #endif
     RealTimeData rt_data;;
     uint32_t mileage_last = 0;

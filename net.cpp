@@ -217,7 +217,7 @@ int Nwrite(int fd, const char *buf, size_t count, int prot)
     }
     return count;
 }
-//return if error happened, or data write over
+void printbuf(void *buffer, int len);
 int tcp_snd(prot_handle *handle)
 {
     uint8_t *buf = handle->sndData_s;
@@ -227,7 +227,8 @@ int tcp_snd(prot_handle *handle)
     int ret = 0;
     int offset = 0;
     
-    //printf("sendlen = %d\n", len);
+    printf("sendlen = %d\n", len);
+    //printbuf(buf, len);
 
     if(fd< 0 || len < 0 || !buf){
         return -1;
@@ -273,7 +274,6 @@ int do_recv_msg(int fd, uint8_t *buf, int count, uint8_t *msg)
 }
 #endif
 
-void printbuf(void *buffer, int len);
 int tcp_rcv(prot_handle *handle)
 {
     int fd = handle->fd;

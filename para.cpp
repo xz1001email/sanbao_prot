@@ -25,9 +25,9 @@ void read_dev_para(void *para, uint8_t para_type)
 
     pthread_mutex_lock(&para_lock);
 
-    if(para_type == SAMPLE_DEVICE_ID_ADAS)
+    if(para_type == DEVICE_ID_ADAS)
         memcpy(para, &adas_para, sizeof(adas_para));
-    else if(para_type == SAMPLE_DEVICE_ID_DMS)
+    else if(para_type == DEVICE_ID_DMS)
         memcpy(para, &dms_para, sizeof(dms_para));
 
     pthread_mutex_unlock(&para_lock);
@@ -43,7 +43,7 @@ void write_dev_para(void *para, uint8_t para_type)
     in8 = (uint8_t *)para;
 
     pthread_mutex_lock(&para_lock);
-    if(para_type == SAMPLE_DEVICE_ID_ADAS){
+    if(para_type == DEVICE_ID_ADAS){
         printf("writing adas para...\n");
         out8 = (uint8_t *)&adas_para;
         if(pAdasPara->auto_photo_time_period != 0xFFFF)
@@ -63,7 +63,7 @@ void write_dev_para(void *para, uint8_t para_type)
         }
 
         adas_para_check(&adas_para);
-    }else if(para_type == SAMPLE_DEVICE_ID_DMS){
+    }else if(para_type == DEVICE_ID_DMS){
         printf("writing dms para...\n");
         out8 = (uint8_t *)&dms_para;
 
@@ -572,7 +572,7 @@ void set_AdasParaSetting_default()
 
     memset(&para.reserve2[0], 0, sizeof(para.reserve2));
 
-    write_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
+    write_dev_para(&para, DEVICE_ID_ADAS);
 
     printf("write default adas para to global para!\n");
 }
@@ -619,7 +619,7 @@ void set_DmsParaSetting_default()
 
     memset(&para.reserve2[0], 0, sizeof(para.reserve2));
 
-    write_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
+    write_dev_para(&para, DEVICE_ID_DMS);
     printf("write default dms para to global para!\n");
 }
 
@@ -649,7 +649,7 @@ int read_local_adas_para_file(const char* filename)
             return 2;
         }
         printf("write local file to global adas para\n");
-        write_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
+        write_dev_para(&para, DEVICE_ID_ADAS);
         print_adas_para(&para);
 
 #if 0
@@ -699,7 +699,7 @@ int read_local_dms_para_file(const char* filename)
             return 2;
         }
         printf("write local file to global dms para\n");
-        write_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
+        write_dev_para(&para, DEVICE_ID_DMS);
         print_dms_para(&para);
 
 #if 0
@@ -727,7 +727,7 @@ int write_local_adas_para_file(const char* filename) {
     int ret = 0;
     AdasParaSetting para;
 
-    read_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
+    read_dev_para(&para, DEVICE_ID_ADAS);
     print_adas_para(&para);
     ret = write_file(filename, &para, sizeof(para));
 
@@ -737,7 +737,7 @@ int write_local_dms_para_file(const char* filename) {
     int ret = 0;
     DmsParaSetting dms_para;
 
-    read_dev_para(&dms_para, SAMPLE_DEVICE_ID_DMS);
+    read_dev_para(&dms_para, DEVICE_ID_DMS);
     print_dms_para(&dms_para);
     ret = write_file(filename, &dms_para, sizeof(dms_para));
 

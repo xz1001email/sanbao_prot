@@ -315,13 +315,13 @@ void GetConfigResolution(int *w, int *h)
 
 #if defined ENABLE_ADAS
     AdasParaSetting para;
-    read_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
+    read_dev_para(&para, DEVICE_ID_ADAS);
     index = para.image_Resolution%6;
     *w = ConfigResolution[index][0];
     *h = ConfigResolution[index][1];
 #elif defined ENABLE_DMS
     DmsParaSetting para;
-    read_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
+    read_dev_para(&para, DEVICE_ID_DMS);
     index = para.image_Resolution%6;
     *w = ConfigResolution[index][0];
     *h = ConfigResolution[index][1];

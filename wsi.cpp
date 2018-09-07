@@ -1210,7 +1210,7 @@ int main(int argc, char **argv)
     printf("---compile time %s %s---\n", __DATE__, __TIME__);
 
     signal(SIGINT, sighandler);
-    if(global_var_init()){
+    if(run_prepare_init()){
         printf("init fail\n");
         exit(0);
     }
