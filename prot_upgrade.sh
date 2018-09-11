@@ -5,20 +5,20 @@ cd /mnt/obb
 busybox mv package.bin package.tar.gz
 busybox tar xzf package.tar.gz
 
-if [ -f adasProt ]; then
-    echo "update adasProt..."
-    busybox chmod 0755 adasProt
-    busybox cp adasProt /data/adasProt_new
-    busybox mv /data/adasProt_new /data/adasProt
+if [ -f AdasProt ]; then
+    echo "update AdasProt..."
+    busybox chmod 0755 AdasProt
+    busybox cp AdasProt /data/AdasProt_new
+    busybox mv /data/AdasProt_new /data/AdasProt
 else
-    echo "adasProt not exsist"
+    echo "AdasProt not exsist"
 fi
 
-if [ -f dmsProt ]; then
-    echo "update dmsProt..."
-    busybox chmod 0755 dmsProt
-    busybox cp dmsProt /data/dmsProt_new
-    busybox mv /data/dmsProt_new /data/dmsProt
+if [ -f DsmProt ]; then
+    echo "update DsmProt..."
+    busybox chmod 0755 DsmProt
+    busybox cp DsmProt /data/DsmProt_new
+    busybox mv /data/DsmProt_new /data/DsmProt
 else
-    echo "dmsProt not exsist"
+    echo "DsmProt not exsist"
 fi
