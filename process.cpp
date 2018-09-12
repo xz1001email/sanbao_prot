@@ -1268,6 +1268,7 @@ void deal_wsi_dms_info(WsiFrame *can)
     static time_t dms_calling_warn = 0;
     static time_t dms_smoking_warn = 0;
     static time_t dms_abnormal_warn = 0;
+    static time_t dms_absence_release = 0;
     static time_t dms_driver_change = 0;
 
     static uint8_t dms_alert_last[8] = {0,0,0,0,0,0,0,0};
@@ -1368,6 +1369,18 @@ void deal_wsi_dms_info(WsiFrame *can)
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
     }
+
+    if(!cur->alert_absence && last->alert_absence){ /*absence release*/
+        if(!filter_alert_by_speed()){
+            printf("speed filter: absence release\n");
+            goto out;
+        }
+        if(filter_alert_by_time(&dms_absence_release, FILTER_DMS_ALERT_SET_TIME)){
+            printf("absence release, report event!\n");
+            do_snap_shot();
+        }
+    }
+
     //add faceId
     if(cur->alert_faceId && !last->alert_faceId){
         alert_type = DMS_DRIVER_CHANGE;
