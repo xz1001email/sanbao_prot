@@ -2339,11 +2339,9 @@ int recv_upgrade_file(SBProtHeader *pHeader, int32_t len)
                     ack, sizeof(ack));
 
             printf("exe new app...\n");
-#if defined ENABLE_ADAS
             system("killall DsmProt");
-#elif defined ENABLE_DMS
             system("killall AdasProt");
-#endif
+
             exit(0);
             //return 0;
         }

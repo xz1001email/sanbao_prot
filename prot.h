@@ -9,7 +9,7 @@
 
 
 #define HARDWARE_VERSION    "1.0.0"
-#define SOFTWARE_VERSION    "1.1.1"
+#define SOFTWARE_VERSION    "1.1.2"
 
 
 //#define SAVE_MEDIA_NUM_MAX 100
