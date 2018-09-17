@@ -234,6 +234,16 @@ void create_snap_path()
     system(create_path_cmd);
 }
 
+
+void create_upgrade_dir()
+{
+    char create_path_cmd[100];
+
+    sprintf(create_path_cmd, "busybox mkdir -p %s", UPGRADE_FILE_PATH);
+    system(create_path_cmd);
+}
+
+
 int media_filepath_init()
 {
     int ret = 0;
@@ -331,6 +341,9 @@ int global_var_init()
         return -1;
     }
     //read_local_file_to_list();
+
+
+    create_upgrade_dir();
 
     data_log_init(PROT_LOG_NAME, false);
     record_run_time();
@@ -2329,7 +2342,7 @@ int recv_upgrade_file(SBProtHeader *pHeader, int32_t len)
 
         if(message_id == UPGRADE_CMD_CLEAN){
             //do clean
-            system(CLEAN_MPK);
+            system(CLEAN_UPGRADE_BIN);
         }
         if(message_id == UPGRADE_CMD_RUN){
             //do run, do upgrade
@@ -2358,7 +2371,7 @@ int recv_upgrade_file(SBProtHeader *pHeader, int32_t len)
 
         if(packet_index == 0)
         {
-            sprintf(cmd_rm_file, "rm %s",UPGRADE_FILE_PATH);
+            sprintf(cmd_rm_file, "rm %s",UPGRADE_FILE_NAME);
             system(cmd_rm_file);
             memcpy(&data, pchar+1+sizeof(file_trans), 4);
 
@@ -2377,7 +2390,7 @@ int recv_upgrade_file(SBProtHeader *pHeader, int32_t len)
             datalen = len - (sizeof(SBProtHeader) + 1 + 5);
             printf("recv [%d]/[%d], datalen = %d\n", packet_num, packet_index, datalen);
 
-            fd = open(UPGRADE_FILE_PATH, O_RDWR|O_CREAT, 0644);
+            fd = open(UPGRADE_FILE_NAME, O_RDWR|O_CREAT, 0644);
             lseek(fd, offset, SEEK_SET);
             ret = write(fd, pchar+5, datalen);
             close(fd);

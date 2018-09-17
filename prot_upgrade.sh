@@ -1,9 +1,14 @@
 #!/system/bin/sh
 
+upgrade_dir="/mnt/obb/prot_upgrade"
+cd $upgrade_dir
 
-cd /mnt/obb
-busybox mv package.bin package.tar.gz
-busybox tar xzf package.tar.gz
+target_bin="subiao_upgrade.bin"
+target_tgz="subiao_upgrade.tar.gz"
+
+busybox mv $target_bin $target_tgz
+echo "Extracting target.tgz..."
+busybox tar xzf $target_tgz
 
 mount -o remount,rw /system
 
@@ -17,7 +22,7 @@ do
     if [ -f $bin ]; then
         echo "update $bin..."
         busybox chmod 0755 $bin
-        busybox cp $bin $bin_dir$bin".new"
+        busybox mv $bin $bin_dir$bin".new"
         busybox mv $bin_dir$bin".new" $bin_dir$bin
         sync
     else
@@ -35,7 +40,7 @@ do
     if [ -f $conf ]; then
         echo "update $conf..."
         busybox chmod 0755 $conf
-        busybox cp $conf $conf_dir$conf".new"
+        busybox mv $conf $conf_dir$conf".new"
         busybox mv $conf_dir$conf".new" $conf_dir$conf
         sync
     else
@@ -44,4 +49,27 @@ do
 done
 
 sync
+
+echo "update prot done !\n"
+
+
+###    update algo
+algo_dir="./"
+
+algo_update="install_mpk.sh"
+
+for mpk in `find $algo_dir -name "*.mpk"`
+do
+    echo "updating $mpk ..."
+    $algo_update $mpk
+    echo "updating $mpk done"
+    rm $mpk
+    echo "delete $mpk\n"
+done
+
+sync
+
+rm $target_tgz
+echo "update algo done !"
+
 

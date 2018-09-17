@@ -9,7 +9,7 @@
 
 
 #define HARDWARE_VERSION    "1.0.0"
-#define SOFTWARE_VERSION    "1.1.2"
+#define SOFTWARE_VERSION    "1.1.3"
 
 
 //#define SAVE_MEDIA_NUM_MAX 100
@@ -43,16 +43,11 @@
 #define LOCAL_ADAS_PRAR_FILE     "/data/adas_para"
 #define LOCAL_DMS_PRAR_FILE     "/data/dms_para"
 
-#if 0
-#define UPGRADE_FILE_PATH     "/data/upgrade.mpk"
-#define CLEAN_MPK " rm /data/upgrade.mpk"
-#define UPGRADE_FILE_CMD     "/data/upgrade.sh /data/upgrade.mpk"
-#else
-#define UPGRADE_FILE_PATH     "/mnt/obb/package.bin"
-#define CLEAN_MPK             "rm /mnt/obb/package.bin"
-#define UPGRADE_FILE_CMD      "/data/prot_upgrade.sh"
 
-#endif
+#define UPGRADE_FILE_PATH     "/mnt/obb/upgrade/"
+#define UPGRADE_FILE_NAME     "/mnt/obb/upgrade/subiao_upgrade.bin"
+#define CLEAN_UPGRADE_BIN     "rm /mnt/obb/upgrade/subiao_upgrade.bin"
+#define UPGRADE_FILE_CMD      "/data/prot_upgrade.sh"
 
 //protocol
 #define PROTOCOL_USING_BIG_ENDIAN
