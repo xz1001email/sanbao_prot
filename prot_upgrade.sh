@@ -49,8 +49,7 @@ do
 done
 
 sync
-
-echo "update prot done !\n"
+echo -e "update prot done !\n"
 
 
 ###    update algo
@@ -64,7 +63,7 @@ do
     $algo_update $mpk
     echo "updating $mpk done"
     rm $mpk
-    echo "delete $mpk\n"
+    echo -e "delete $mpk\n"
 done
 
 sync

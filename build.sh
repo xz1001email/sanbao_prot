@@ -75,7 +75,7 @@ cp $buildtarget $outputpath$stripdir$target_dist
 echo "strip..."
 $strip $outputpath$stripdir$target_dist
 
-cp prot_upgrade.sh prot.json $outputpath$stripdir
+cp adasProt.sh dsmProt.sh prot_upgrade.sh prot.json $outputpath$stripdir
 
 
 
