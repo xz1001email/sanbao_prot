@@ -927,8 +927,8 @@ int record_speed()
     return 0;
 }
 
-
 void tcp_socket_close(prot_handle *handle);
+#if 0
 void check_heart_beat()
 {
     static time_t s_record_last = 0;
@@ -961,6 +961,34 @@ void check_heart_beat()
         }
     }
 }
+#else
+void check_heart_beat()
+{
+    static time_t s_record_last = 0;
+    static uint32_t count = 0;
+
+    if(g_configini.use_heart){
+        if(CONNECT_OFF == process_socket_status(0, GET_CONNECT_STATUS)){ /* 没有建立链接 */
+            touch_time(&s_record_last);
+            return ;
+        }
+        if(limit_record_time(&s_record_last, 1)){ /* 周期性检查 */
+            if(heart_beat_process(0, READ_MSG) == HEART_BEAT_DEATH){
+                count ++;
+                printf("heart beat waiting  active! count=%d\n", count);
+                if(count >= g_configini.check_heart_period){ /* timeout */
+                    count = 0;
+                    tcp_socket_close(&g_handle);
+                }
+            }else{ /* alive */
+                count = 0;
+                //printf("set heart beat death!\n");
+                heart_beat_process(HEART_BEAT_DEATH, WRITE_MSG); /* 设置心跳关闭 */
+            }
+        }
+    }
+}
+#endif
 
 void mmid_to_filename(uint32_t id, uint8_t type, char *filepath)
 {
@@ -2761,6 +2789,8 @@ static uint32_t unescaple_msg(uint8_t *buf, uint8_t *msg, int msglen)
 #define SNAP_SHOT_BY_DISTANCE      2
 void *pthread_snap_shot(void *p)
 {
+    useconds_t usec = 100000;
+
 #ifdef ENABLE_ADAS
     AdasParaSetting tmp;
     uint8_t para_type = SAMPLE_DEVICE_ID_ADAS;
@@ -2789,10 +2819,10 @@ void *pthread_snap_shot(void *p)
                     printf("auto snap shot!\n");
                     do_snap_shot();
                 }else{
-                    usleep(200000);
+                    usleep(usec);
                 }
             }else{//0不抓拍
-                usleep(200000);
+                usleep(usec);
             }
             //定距拍照
         }else if(tmp.auto_photo_mode == SNAP_SHOT_BY_DISTANCE){
@@ -2806,13 +2836,13 @@ void *pthread_snap_shot(void *p)
                     }
                     mileage_last = rt_data.mileage; //单位是0.1km
                 }else{
-                    usleep(200000);
+                    usleep(usec);
                 }
             }else{//0不抓拍
-                usleep(200000);
+                usleep(usec);
             }
         }else{
-            usleep(200000);
+            usleep(usec);
         }
     }
     pthread_exit(NULL);
