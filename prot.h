@@ -44,9 +44,9 @@
 #define LOCAL_DMS_PRAR_FILE     "/data/dms_para"
 
 
-#define UPGRADE_FILE_PATH     "/mnt/obb/upgrade/"
-#define UPGRADE_FILE_NAME     "/mnt/obb/upgrade/subiao_upgrade.bin"
-#define CLEAN_UPGRADE_BIN     "rm /mnt/obb/upgrade/subiao_upgrade.bin"
+#define UPGRADE_FILE_PATH     "/mnt/obb/prot_upgrade/"
+#define UPGRADE_FILE_NAME     "/mnt/obb/prot_upgrade/subiao_upgrade.bin"
+#define CLEAN_UPGRADE_BIN     "rm /mnt/obb/prot_upgrade/subiao_upgrade.bin"
 #define UPGRADE_FILE_CMD      "/data/prot_upgrade.sh"
 
 //protocol
