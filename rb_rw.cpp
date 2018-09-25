@@ -928,6 +928,132 @@ int adas_alert_type_to_index(int type)
     return index;
 }
 
+int32_t video_reslution[][2]={
+
+    352, 288,         /*    CIF        */ 
+    352, 576,         /*    HD1        */ 
+    704, 576,         /*    4CIF/D1    */ 
+    960, 576,         /*    WD1        */ 
+    640, 480,         /*    VGA        */ 
+    1280, 720,        /*    720p       */ 
+    1920, 1080        /*    1080p      */ 
+};
+
+int32_t image_reslution[][2]={
+
+    352,288,
+    704,288,
+    704,576,
+    640,480,
+    1280,720,
+    1920,1080
+};
+
+enum VIDEO_INDEX{
+    V, /* video */
+    I, /* image */
+    MAX  
+};
+
+//reconfig image
+void config_adas_video_resolution(int fps, int quality)
+{
+    static int32_t s_type[2] = {0, 0};
+    AdasParaSetting para;
+    read_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
+
+    if(s_type[V] != para.video_Resolution){ /* video type change */
+        if(para.video_Resolution > 0 && para.video_Resolution <= sizeof(video_reslution)/sizeof(video_reslution[0])){
+            ma_api_record_stop(MA_CAMERA_IDX_ADAS);
+            ma_api_record_configure(MA_CAMERA_IDX_ADAS,\
+                    video_reslution[para.video_Resolution-1][0],\
+                    video_reslution[para.video_Resolution-1][1], 1*1024*1024);
+            ma_api_record_start(MA_CAMERA_IDX_ADAS);
+
+            printf("reconfig dms video resolution: %d * %d, old type = %d, new type = %d\n",
+                    video_reslution[para.video_Resolution-1][0],\
+                    video_reslution[para.video_Resolution-1][1], s_type[I], para.video_Resolution);
+            sleep(1);
+        }
+    }
+    if(s_type[I] != para.image_Resolution){ /* image type change */
+        if(para.image_Resolution > 0 && para.image_Resolution <= sizeof(image_reslution)/sizeof(image_reslution[0])){
+            ma_api_jpeg_enc_stop(MA_CAMERA_IDX_ADAS);
+            ma_api_jpeg_enc_configure(MA_CAMERA_IDX_ADAS,\
+                    image_reslution[para.image_Resolution-1][0],\
+                    image_reslution[para.image_Resolution-1][1], fps, 50);
+            ma_api_jpeg_enc_start(MA_CAMERA_IDX_ADAS);
+
+            printf("reconfig dms image resolution: %d * %d, old type = %d, new type = %d\n",
+                    image_reslution[para.image_Resolution-1][0],\
+                    image_reslution[para.image_Resolution-1][1], s_type[V], para.image_Resolution);
+            sleep(1);
+        }
+    }
+
+    if(para.video_Resolution > 0 && para.video_Resolution <= sizeof(video_reslution)/sizeof(video_reslution[0])){
+        s_type[V] = para.video_Resolution;
+    }
+    if(para.image_Resolution > 0 && para.image_Resolution <= sizeof(image_reslution)/sizeof(image_reslution[0])){
+        s_type[I] = para.image_Resolution;
+    }
+
+#if 0
+    printf("video_reslution = %d\n", para.video_Resolution);
+    printf("v size = %ld, type = %d\n", sizeof(video_reslution)/sizeof(video_reslution[0]), s_type[V]);
+    printf("I size = %ld, type = %d\n", sizeof(image_reslution)/sizeof(image_reslution[0]), s_type[I]);
+#endif
+}
+
+void config_dms_video_resolution(int fps, int quality)
+{
+    static int32_t s_type[2] = {0, 0};
+    DmsParaSetting para;
+    read_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
+
+    if(s_type[V] != para.video_Resolution){ /* video type change */
+        if(para.video_Resolution > 0 && para.video_Resolution <= sizeof(video_reslution)/sizeof(video_reslution[0])){
+            ma_api_record_stop(MA_CAMERA_IDX_DRIVER);
+            ma_api_record_configure(MA_CAMERA_IDX_DRIVER,\
+                    video_reslution[para.video_Resolution-1][0],\
+                    video_reslution[para.video_Resolution-1][1], 1*1024*1024);
+            ma_api_record_start(MA_CAMERA_IDX_DRIVER);
+
+            printf("reconfig dms video resolution: %d * %d, old type = %d, new type = %d\n",
+                    video_reslution[para.video_Resolution-1][0],\
+                    video_reslution[para.video_Resolution-1][1], s_type[I], para.video_Resolution);
+            sleep(1);
+        }
+    }
+    if(s_type[I] != para.image_Resolution){ /* image type change */
+        if(para.image_Resolution > 0 && para.image_Resolution <= sizeof(image_reslution)/sizeof(image_reslution[0])){
+            ma_api_jpeg_enc_stop(MA_CAMERA_IDX_DRIVER);
+            ma_api_jpeg_enc_configure(MA_CAMERA_IDX_DRIVER,\
+                    image_reslution[para.image_Resolution-1][0],\
+                    image_reslution[para.image_Resolution-1][1], fps, 50);
+            ma_api_jpeg_enc_start(MA_CAMERA_IDX_DRIVER);
+
+            printf("reconfig dms image resolution: %d * %d, old type = %d, new type = %d\n",
+                    image_reslution[para.image_Resolution-1][0],\
+                    image_reslution[para.image_Resolution-1][1], s_type[V], para.image_Resolution);
+            sleep(1);
+        }
+    }
+
+    if(para.video_Resolution > 0 && para.video_Resolution <= sizeof(video_reslution)/sizeof(video_reslution[0])){
+        s_type[V] = para.video_Resolution;
+    }
+    if(para.image_Resolution > 0 && para.image_Resolution <= sizeof(image_reslution)/sizeof(image_reslution[0])){
+        s_type[I] = para.image_Resolution;
+    }
+
+#if 0
+    printf("video_reslution = %d\n", para.video_Resolution);
+    printf("v size = %ld, type = %d\n", sizeof(video_reslution)/sizeof(video_reslution[0]), s_type[V]);
+    printf("I size = %ld, type = %d\n", sizeof(image_reslution)/sizeof(image_reslution[0]), s_type[I]);
+#endif
+}
+
 //ma_api_jpeg_enc_stop(MA_CAMERA_IDX_ADAS);
 void *pthread_save_media(void *p)
 {
@@ -961,12 +1087,9 @@ void *pthread_save_media(void *p)
 
 #if defined ENABLE_ADAS 
     //enable adas h264
-    ma_api_jpeg_enc_configure(MA_CAMERA_IDX_ADAS, 704, 576, g_configini.jpeg_coder_fps, 50);
-    ma_api_jpeg_enc_start(MA_CAMERA_IDX_ADAS);
-    adas_rb_size = open_adas_camera(adas_rbname);
 
-    ma_api_record_configure(MA_CAMERA_IDX_ADAS, 704, 576, 1*1024*1024);
-    ma_api_record_start(MA_CAMERA_IDX_ADAS);
+    adas_rb_size = open_adas_camera(adas_rbname);
+    config_adas_video_resolution(g_configini.jpeg_coder_fps, 50);
 
     //create rb user
     for(i=0; i<ADAS_JPEG_USER_NUM; i++){
@@ -984,12 +1107,9 @@ void *pthread_save_media(void *p)
 
 #elif defined ENABLE_DMS 
     //enable dms h264
-    ma_api_jpeg_enc_configure(MA_CAMERA_IDX_DRIVER, 704, 576, g_configini.jpeg_coder_fps, 50);
-    ma_api_jpeg_enc_start(MA_CAMERA_IDX_DRIVER);
-    dms_rb_size = open_dms_camera(dms_rbname);
 
-    ma_api_record_configure(MA_CAMERA_IDX_DRIVER, 704, 576, 1*1024*1024);
-    ma_api_record_start(MA_CAMERA_IDX_DRIVER);
+    dms_rb_size = open_dms_camera(dms_rbname);
+    config_dms_video_resolution(g_configini.jpeg_coder_fps, 50);
 
     //create rb user
     for(i=0; i<DMS_JPEG_USER_NUM; i++){
@@ -1019,12 +1139,20 @@ void *pthread_save_media(void *p)
 
     while (!force_exit) {
         //read_pthread_num(i);
-        if(pull_mm_queue(&mm))
-        {
+        if(pull_mm_queue(&mm)){
             usleep(10000);
             // sleep(1);
+
+#if defined ENABLE_ADAS 
+            config_adas_video_resolution(g_configini.jpeg_coder_fps, 50);
+#elif defined ENABLE_DMS 
+            config_dms_video_resolution(g_configini.jpeg_coder_fps, 50);
+#endif
+
             continue;
         }
+        
+
         task_index = task_index % 8;
 #if defined ENABLE_ADAS 
         if(!mm.get_another_camera_video){
