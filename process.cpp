@@ -1425,10 +1425,12 @@ void deal_wsi_dms_info(WsiFrame *can)
     //add faceId
     if(cur->alert_faceId && !last->alert_faceId){
         alert_type = DMS_DRIVER_CHANGE;
+#if 0
         if(!filter_alert_by_speed()){
             printf("speed filter: %s\n", dms_alert_type_to_str(alert_type));
             goto out;
         }
+#endif
         if(filter_alert_by_time(&dms_driver_change, FILTER_DMS_ALERT_SET_TIME)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
