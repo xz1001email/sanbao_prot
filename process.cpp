@@ -36,7 +36,7 @@
 using namespace std;
 
 
-int GetFileSize(char *filename);
+int GetFileSize(const char *filename);
 const char *dms_alert_type_to_str(uint8_t type);
 const char *adas_alert_type_to_str(uint8_t type);
 
@@ -316,6 +316,7 @@ int prot_init_pre(prot_handle *phandle);
 extern LocalConfig g_configini;
 int global_var_init()
 {
+    int size = 0;
     memset(&g_configini, 0, sizeof(g_configini));
 
     sem_send_init();
@@ -342,12 +343,16 @@ int global_var_init()
     }
     //read_local_file_to_list();
 
-
     create_upgrade_dir();
 
-    data_log_init(PROT_LOG_NAME, false);
-    record_run_time();
+    size = GetFileSize(PROT_LOG_NAME);
+    if(size>100*1024*1024){
+        data_log_init(PROT_LOG_NAME, true);
+    }else{
+        data_log_init(PROT_LOG_NAME, false);
+    }
 
+    record_run_time();
 
     /*init for io process*/
     prot_init_pre(&g_handle);
@@ -1948,7 +1953,7 @@ int find_local_image_name(uint8_t type, uint32_t id, char *filepath)
     return GetFileSize(filepath);
 }
 
-int GetFileSize(char *filename)
+int GetFileSize(const char *filename)
 {
     int filesize = 0;
     FILE *fp = NULL;
