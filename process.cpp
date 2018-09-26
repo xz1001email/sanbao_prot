@@ -1316,6 +1316,29 @@ void deal_wsi_dms_info(WsiFrame *can)
     uint8_t dms_alert[8] = {0,0,0,0,0,0,0,0};
     uint8_t dms_alert_mask[8] = {0xFF,0xFF,0x0F,0,0,0,0,0};
 
+    uint32_t fatigue_filter_time;
+    uint32_t distract_filter_time;
+    uint32_t call_filter_time;
+    uint32_t smoke_filter_time;
+    uint32_t abnormal_filter_time;
+    uint32_t absence_filter_time;
+
+    DmsParaSetting para;
+    read_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
+    fatigue_filter_time = para.FatigueDriv_VideoTime + g_configini.alert_time_filter;
+    distract_filter_time = para.DistractionDriv_VideoTime+ g_configini.alert_time_filter;
+    call_filter_time = para.CallingDriv_VideoTime+ g_configini.alert_time_filter;
+    smoke_filter_time = para.SmokingDriv_VideoTime+ g_configini.alert_time_filter;
+    abnormal_filter_time = para.AbnormalDriv_VideoTime+ g_configini.alert_time_filter;
+
+#if 0
+    printf("fatigue_filter_time = %d\n", fatigue_filter_time);
+    printf("distract_filter_time = %d\n", distract_filter_time);
+    printf("call_filter_time = %d\n", call_filter_time);
+    printf("smoke_filter_time = %d\n", smoke_filter_time);
+    printf("abnormal_filter_time = %d\n", abnormal_filter_time);
+#endif
+
     SBProtHeader *pSend = (SBProtHeader *) txbuf;
     DsmWarnFrame *uploadmsg = (DsmWarnFrame *)&msgbuf[0];
 
@@ -1360,7 +1383,7 @@ void deal_wsi_dms_info(WsiFrame *can)
             printf("speed filter: %s\n", dms_alert_type_to_str(alert_type));
             goto out;
         }
-        if(filter_alert_by_time(&dms_fatigue_warn, FILTER_DMS_ALERT_SET_TIME)){
+        if(filter_alert_by_time(&dms_fatigue_warn, fatigue_filter_time)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
@@ -1372,7 +1395,7 @@ void deal_wsi_dms_info(WsiFrame *can)
             printf("speed filter: %s\n", dms_alert_type_to_str(alert_type));
             goto out;
         }
-        if(filter_alert_by_time(&dms_distract_warn, FILTER_DMS_ALERT_SET_TIME)){
+        if(filter_alert_by_time(&dms_distract_warn, distract_filter_time)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
@@ -1383,7 +1406,7 @@ void deal_wsi_dms_info(WsiFrame *can)
             printf("speed filter: %s\n", dms_alert_type_to_str(alert_type));
             goto out;
         }
-        if(filter_alert_by_time(&dms_calling_warn, FILTER_DMS_ALERT_SET_TIME)){
+        if(filter_alert_by_time(&dms_calling_warn, call_filter_time)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
@@ -1394,7 +1417,7 @@ void deal_wsi_dms_info(WsiFrame *can)
             printf("speed filter: %s\n", dms_alert_type_to_str(alert_type));
             goto out;
         }
-        if(filter_alert_by_time(&dms_smoking_warn, FILTER_DMS_ALERT_SET_TIME)){
+        if(filter_alert_by_time(&dms_smoking_warn, smoke_filter_time)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
@@ -1405,10 +1428,18 @@ void deal_wsi_dms_info(WsiFrame *can)
             printf("speed filter: %s\n", dms_alert_type_to_str(alert_type));
             goto out;
         }
-        if(filter_alert_by_time(&dms_abnormal_warn, FILTER_DMS_ALERT_SET_TIME)){
+        if(filter_alert_by_time(&dms_abnormal_warn, abnormal_filter_time)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
             message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
+    }
+
+    /* 如果识别到， 则不在判断离岗解除事件 */
+    if(cur->alert_faceId && !last->alert_faceId){
+        alert_type = DMS_DRIVER_CHANGE;
+        playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
+        message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+        goto out;
     }
 
     if(!cur->alert_absence && last->alert_absence){ /*absence release*/
@@ -1419,21 +1450,6 @@ void deal_wsi_dms_info(WsiFrame *can)
         if(filter_alert_by_time(&dms_absence_release, FILTER_DMS_ALERT_SET_TIME)){
             printf("absence release, report event!\n");
             do_snap_shot();
-        }
-    }
-
-    //add faceId
-    if(cur->alert_faceId && !last->alert_faceId){
-        alert_type = DMS_DRIVER_CHANGE;
-#if 0
-        if(!filter_alert_by_speed()){
-            printf("speed filter: %s\n", dms_alert_type_to_str(alert_type));
-            goto out;
-        }
-#endif
-        if(filter_alert_by_time(&dms_driver_change, FILTER_DMS_ALERT_SET_TIME)){
-            playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
-            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
         }
     }
 
@@ -1716,7 +1732,20 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
     //char logbuf[256];
     char logbuf[1024];
     static char s_start_flag = 0;
+    AdasParaSetting para;
 
+    uint32_t ldw_filter_time;
+    uint32_t hw_filter_time;
+    uint32_t fcw_filter_time;
+    read_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
+    ldw_filter_time = para.LDW_video_time + g_configini.alert_time_filter;
+    hw_filter_time = para.HW_video_time + g_configini.alert_time_filter;
+    fcw_filter_time = para.FCW_video_time + g_configini.alert_time_filter;
+#if 0
+    printf("ldw_filter_time = %d\n", ldw_filter_time);
+    printf("hw_filter_time = %d\n", hw_filter_time);
+    printf("fcw_filter_time = %d\n", fcw_filter_time);
+#endif
     uint32_t i = 0;
     uint8_t all_warning_masks[sizeof(MECANWarningMessage)] = {
         0x00, 0x00, 0x01, 0x00,
@@ -1756,7 +1785,7 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
         if (0 != memcmp(trigger_data, &g_last_trigger_warning, sizeof(g_last_trigger_warning)) && 0 != trigger_data[4]) {
             if (can.left_ldw || can.right_ldw) {
                 printf("------LDW event-----------\n");
-                if(!filter_alert_by_time(&ldw_alert, FILTER_ADAS_ALERT_SET_TIME)){
+                if(!filter_alert_by_time(&ldw_alert, ldw_filter_time)){
                     printf("ldw filter alert by time!\n");
                 }else{
                     if(!filter_alert_by_speed()){
@@ -1780,7 +1809,7 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
             }
             if (can.fcw_on) {
                 printf("------FCW event-----------\n");
-                if(!filter_alert_by_time(&fcw_alert, FILTER_ADAS_ALERT_SET_TIME)){
+                if(!filter_alert_by_time(&fcw_alert, fcw_filter_time)){
                     printf("ldw filter alert by time!\n");
                 }else{
                     if(!filter_alert_by_speed()){
@@ -1805,7 +1834,7 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
             //printf("headway_measurement:%d\n", can.headway_measurement);
 #if 0
             if (HW_LEVEL_RED_CAR == can.headway_warning_level) {
-                if(!filter_alert_by_time(&hw_alert, FILTER_ADAS_ALERT_SET_TIME)){
+                if(!filter_alert_by_time(&hw_alert, hw_filter_time)){
                     printf("ldw filter alert by time!\n");
                 }else{
                     playloadlen = build_adas_warn_frame(SB_WARN_TYPE_HW,SB_WARN_STATUS_NONE, uploadmsg);
@@ -1821,7 +1850,7 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
 
             if (HW_LEVEL_RED_CAR == can.headway_warning_level) {
                 //要和上一次结束的时间比较
-                if(!filter_alert_by_time(&hw_alert, FILTER_ADAS_ALERT_SET_TIME)){
+                if(!filter_alert_by_time(&hw_alert, hw_filter_time)){
                     printf("hw filter alert by time!\n");
                 }else{
                     if(!filter_alert_by_speed()){
@@ -1845,7 +1874,7 @@ int deal_wsi_adas_can700(WsiFrame *sourcecan)
             } else if (HW_LEVEL_RED_CAR == \
                     g_last_warning_data.headway_warning_level && s_start_flag) {
 #if 0
-                hw 结束不进行过滤
+                hw 结束不进行过滤, 保证有开始 就有结束
                     if(!filter_alert_by_speed())
                         goto out;
 #endif

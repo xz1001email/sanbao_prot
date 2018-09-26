@@ -37,7 +37,6 @@
 using namespace rapidjson;
 using namespace std;
 
-HalIO &halio = HalIO::Instance();
 
 #define MOBILEYE_WARNING_ID     (0x700)
 #define MOBILEYE_CARSIGNAL_ID   (0x760)
@@ -516,6 +515,7 @@ int unpack_wsi_msg(char *data, size_t size)
 }
 
 //for dms new interface
+#if 0
 int unpack_wsi_msg2(char *data, size_t size)
 {
 #define DMS_JSON_MSG_LEN (1024*1024)
@@ -575,6 +575,7 @@ int unpack_wsi_msg2(char *data, size_t size)
 #endif
     return 0;
 }
+#endif
 
 volatile int force_exit = 0;
 static struct lws *wsi_dumb;
@@ -916,13 +917,6 @@ void *pthread_websocket_client(void *para)
     pthread_exit(NULL);
 }
 
-void can_send_init(void)
-{
-    //HalIO &halio = HalIO::Instance();
-    halio.Init(NULL, 0, true);
-}
-
-
 static void usage(const char *exe_name)
 {
     printf("Usage:%s <switches> [option]\n", exe_name);
@@ -956,8 +950,9 @@ void set_local_config_default(LocalConfig *config)
     config->record_speed = 1;
     config->record_period = 30;
 
+    config->alert_time_filter=10;
     config->use_heart = 1;
-    config->check_heart_period = 180;
+    config->check_heart_period = 90;
     
 #define TTY_NAME "/dev/ttySC0"
     snprintf(&config->tty_name[0], sizeof(config->tty_name), "%s", TTY_NAME);
@@ -985,6 +980,7 @@ void local_config_dump(LocalConfig *config)
 
     printf("jpeg_coder_fps : %d\n", config->jpeg_coder_fps);
     printf("speed_filter_enable : %d\n", config->speed_filter_enable);
+    printf("alert_time_filter: %d\n", config->alert_time_filter);
 
     printf("record_speed : %d\n", config->record_speed);
     printf("record_period : %d\n", config->record_period);
@@ -1122,6 +1118,12 @@ static bool get_alert_para(const rapidjson::Value& val, LocalConfig *config)
         config->record_period = val["record_period"].GetUint();
     }
 
+    assert(val["alert_time_filter"].IsNumber());
+    assert(val["alert_time_filter"].IsUint());
+    if (val.HasMember("alert_time_filter")) {
+        config->alert_time_filter= val["alert_time_filter"].GetUint();
+    }
+
     assert(val["use_heart"].IsBool());
     if(val["use_heart"].GetBool()){
         config->use_heart= 1;
@@ -1252,7 +1254,6 @@ int main(int argc, char **argv)
     }
     local_config_dump(&g_configini);
 
-    //can_send_init();
     if(pthread_create(&pth[0], NULL, pthread_websocket_client, NULL)){
         printf("pthread_create fail!\n");
         return -1;

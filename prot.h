@@ -619,7 +619,7 @@ typedef struct __LocalConfig {
 
     char jpeg_coder_fps; // 帧率设置
     char speed_filter_enable; //报警的速度阀值
-    char time_period_filter;  //报警过滤时间
+    char alert_time_filter;  //报警过滤时间
     char record_speed;
     uint32_t record_period;
 

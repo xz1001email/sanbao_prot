@@ -11,11 +11,12 @@
     },
     "alert_para": {
         "speed_filter_enable": true,
+        "alert_time_filter": 10,
         "jpeg_fps": 5,
         "record_speed": true,
         "record_period": 60,
         "use_heart": true,
-        "check_heart_period": 180
+        "check_heart_period": 90
     },
     "tty": {
         "tty_name": "/dev/ttySC0",
