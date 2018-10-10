@@ -2308,7 +2308,7 @@ void recv_warning_ack(SBProtHeader *pHeader, int32_t len)
     }
 }
 
-void send_work_status_req_ack(SBProtHeader *pHeader, int32_t len)
+void reply_work_status(SBProtHeader *pHeader, int32_t len)
 {
     ModuleStatus module;
     uint8_t txbuf[256] = {0};
@@ -2324,7 +2324,7 @@ void send_work_status_req_ack(SBProtHeader *pHeader, int32_t len)
         printf("recv cmd:0x%x, data len maybe error!\n", pHeader->cmd);
     }
 }
-void send_work_status()
+void auto_send_work_status()
 {
     uint8_t devid=0;
 #if defined ENABLE_ADAS
@@ -2339,7 +2339,7 @@ void send_work_status()
 
     memset(&module, 0, sizeof(module));
     module.work_status = MODULE_WORKING;
-    message_queue_send(pSend, devid, SAMPLE_CMD_REQ_STATUS, \
+    message_queue_send(pSend, devid, SAMPLE_CMD_UPLOAD_STATUS, \
             (uint8_t*)&module, sizeof(module));
 }
 
@@ -2566,7 +2566,7 @@ static int32_t sample_on_cmd(SBProtHeader *pHeader, int32_t len)
             break;
 
         case SAMPLE_CMD_REQ_STATUS: 
-            send_work_status_req_ack(pHeader, len);
+            reply_work_status(pHeader, len);
             break;
 
         case SAMPLE_CMD_UPLOAD_STATUS: //主动上报状态后，接收到ack
@@ -2732,7 +2732,7 @@ connect_again:
         do_stat_reset();
         process_socket_status(CONNECT_ON, SET_CONNECT_STATUS);
         printf("connected!\n");
-        send_work_status();
+        auto_send_work_status();
 
         while(!force_exit){
             //printf("fd = %d\n", g_handle.fd);
