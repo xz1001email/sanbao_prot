@@ -928,10 +928,19 @@ int adas_alert_type_to_index(int type)
     return index;
 }
 
-int32_t video_reslution[][2]={
-
+int32_t dms_reslution[][2]={
     352, 288,         /*    CIF        */ 
-    352, 576,         /*    HD1        */ 
+    704, 288,         /*    HD1        */ 
+    704, 576,         /*    4CIF/D1    */ 
+    960, 576,         /*    WD1        */ 
+    //640, 480,         /*    VGA        */ 
+    1280, 720,        /*    720p       */ 
+    1920, 1080        /*    1080p      */ 
+};
+
+int32_t adas_reslution[][2]={
+    352, 288,         /*    CIF        */ 
+    704, 288,         /*    HD1        */ 
     704, 576,         /*    4CIF/D1    */ 
     960, 576,         /*    WD1        */ 
     640, 480,         /*    VGA        */ 
@@ -940,7 +949,6 @@ int32_t video_reslution[][2]={
 };
 
 int32_t image_reslution[][2]={
-
     352,288,
     704,288,
     704,576,
@@ -955,101 +963,112 @@ enum VIDEO_INDEX{
     MAX  
 };
 
+int dmsCodeRate[]={250, 500, 800, 1024, 1024, 2048}; /* kB */
+int adasCodeRate[]={250, 500, 800, 1024, 800, 1024, 2048}; /* kB */
+
 //reconfig image
 void config_adas_video_resolution(int fps, int quality)
 {
-    static int32_t s_type[2] = {0, 0};
+    static uint32_t s_type[2] = {0, 0};
+    uint32_t index1=0, index2=0;
     AdasParaSetting para;
     read_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
 
-    if(s_type[V] != para.video_Resolution){ /* video type change */
-        if(para.video_Resolution > 0 && para.video_Resolution <= sizeof(video_reslution)/sizeof(video_reslution[0])){
+    index1 = para.video_Resolution;
+    index2 = para.image_Resolution;
+
+    if(s_type[V] != index1){ /* video type change */
+        if(index1 > 0 && index1 <= sizeof(adas_reslution)/sizeof(adas_reslution[0])){
             ma_api_record_stop(MA_CAMERA_IDX_ADAS);
             ma_api_record_configure(MA_CAMERA_IDX_ADAS,\
-                    video_reslution[para.video_Resolution-1][0],\
-                    video_reslution[para.video_Resolution-1][1], 1*1024*1024);
+                    adas_reslution[index1-1][0],\
+                    adas_reslution[index1-1][1], adasCodeRate[index1-1]*1024);
             ma_api_record_start(MA_CAMERA_IDX_ADAS);
 
-            printf("reconfig dms video resolution: %d * %d, old type = %d, new type = %d\n",
-                    video_reslution[para.video_Resolution-1][0],\
-                    video_reslution[para.video_Resolution-1][1], s_type[I], para.video_Resolution);
+            printf("reconfig adas video resolution: %d * %d, old type = %d, new type = %d, rate = %d Kb/s\n",
+                    adas_reslution[index1-1][0],\
+                    adas_reslution[index1-1][1], s_type[I], index1, adasCodeRate[index1-1]);
             sleep(1);
         }
     }
-    if(s_type[I] != para.image_Resolution){ /* image type change */
-        if(para.image_Resolution > 0 && para.image_Resolution <= sizeof(image_reslution)/sizeof(image_reslution[0])){
+    if(s_type[I] != index2){ /* image type change */
+        if(index2 > 0 && index2 <= sizeof(image_reslution)/sizeof(image_reslution[0])){
             ma_api_jpeg_enc_stop(MA_CAMERA_IDX_ADAS);
             ma_api_jpeg_enc_configure(MA_CAMERA_IDX_ADAS,\
-                    image_reslution[para.image_Resolution-1][0],\
-                    image_reslution[para.image_Resolution-1][1], fps, 50);
+                    image_reslution[index2-1][0],\
+                    image_reslution[index2-1][1], fps, 50);
             ma_api_jpeg_enc_start(MA_CAMERA_IDX_ADAS);
 
-            printf("reconfig dms image resolution: %d * %d, old type = %d, new type = %d\n",
-                    image_reslution[para.image_Resolution-1][0],\
-                    image_reslution[para.image_Resolution-1][1], s_type[V], para.image_Resolution);
+            printf("reconfig adas image resolution: %d * %d, old type = %d, new type = %d\n",
+                    image_reslution[index2-1][0],\
+                    image_reslution[index2-1][1], s_type[V], index2);
             sleep(1);
         }
     }
 
-    if(para.video_Resolution > 0 && para.video_Resolution <= sizeof(video_reslution)/sizeof(video_reslution[0])){
-        s_type[V] = para.video_Resolution;
+    if(index1 > 0 && index1 <= sizeof(adas_reslution)/sizeof(adas_reslution[0])){
+        s_type[V] = index1;
     }
-    if(para.image_Resolution > 0 && para.image_Resolution <= sizeof(image_reslution)/sizeof(image_reslution[0])){
-        s_type[I] = para.image_Resolution;
+    if(index2 > 0 && index2 <= sizeof(image_reslution)/sizeof(image_reslution[0])){
+        s_type[I] = index2;
     }
 
 #if 0
-    printf("video_reslution = %d\n", para.video_Resolution);
-    printf("v size = %ld, type = %d\n", sizeof(video_reslution)/sizeof(video_reslution[0]), s_type[V]);
+    printf("adas_reslution = %d\n", index1);
+    printf("v size = %ld, type = %d\n", sizeof(adas_reslution)/sizeof(adas_reslution[0]), s_type[V]);
     printf("I size = %ld, type = %d\n", sizeof(image_reslution)/sizeof(image_reslution[0]), s_type[I]);
 #endif
 }
 
 void config_dms_video_resolution(int fps, int quality)
 {
-    static int32_t s_type[2] = {0, 0};
+    static uint32_t s_type[2] = {0, 0};
     DmsParaSetting para;
+    uint32_t index1=0, index2=0;
     read_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
 
-    if(s_type[V] != para.video_Resolution){ /* video type change */
-        if(para.video_Resolution > 0 && para.video_Resolution <= sizeof(video_reslution)/sizeof(video_reslution[0])){
+    index1 = para.video_Resolution;
+    index2 = para.image_Resolution;
+
+    if(s_type[V] != index1){ /* video type change */
+        if(index1 > 0 && index1 <= sizeof(dms_reslution)/sizeof(dms_reslution[0])){
             ma_api_record_stop(MA_CAMERA_IDX_DRIVER);
             ma_api_record_configure(MA_CAMERA_IDX_DRIVER,\
-                    video_reslution[para.video_Resolution-1][0],\
-                    video_reslution[para.video_Resolution-1][1], 1*1024*1024);
+                    dms_reslution[index1-1][0],\
+                    dms_reslution[index1-1][1], dmsCodeRate[index1-1]*1024);
             ma_api_record_start(MA_CAMERA_IDX_DRIVER);
 
-            printf("reconfig dms video resolution: %d * %d, old type = %d, new type = %d\n",
-                    video_reslution[para.video_Resolution-1][0],\
-                    video_reslution[para.video_Resolution-1][1], s_type[I], para.video_Resolution);
+            printf("reconfig dms video resolution: %d * %d, old type = %d, new type = %d, rate = %d KB/s\n",
+                    dms_reslution[index1-1][0],\
+                    dms_reslution[index1-1][1], s_type[I], index1, dmsCodeRate[index1-1]);
             sleep(1);
         }
     }
-    if(s_type[I] != para.image_Resolution){ /* image type change */
-        if(para.image_Resolution > 0 && para.image_Resolution <= sizeof(image_reslution)/sizeof(image_reslution[0])){
+    if(s_type[I] != index2){ /* image type change */
+        if(index2 > 0 && index2 <= sizeof(image_reslution)/sizeof(image_reslution[0])){
             ma_api_jpeg_enc_stop(MA_CAMERA_IDX_DRIVER);
             ma_api_jpeg_enc_configure(MA_CAMERA_IDX_DRIVER,\
-                    image_reslution[para.image_Resolution-1][0],\
-                    image_reslution[para.image_Resolution-1][1], fps, 50);
+                    image_reslution[index2-1][0],\
+                    image_reslution[index2-1][1], fps, 50);
             ma_api_jpeg_enc_start(MA_CAMERA_IDX_DRIVER);
 
             printf("reconfig dms image resolution: %d * %d, old type = %d, new type = %d\n",
-                    image_reslution[para.image_Resolution-1][0],\
-                    image_reslution[para.image_Resolution-1][1], s_type[V], para.image_Resolution);
+                    image_reslution[index2-1][0],\
+                    image_reslution[index2-1][1], s_type[V], index2);
             sleep(1);
         }
     }
 
-    if(para.video_Resolution > 0 && para.video_Resolution <= sizeof(video_reslution)/sizeof(video_reslution[0])){
-        s_type[V] = para.video_Resolution;
+    if(index1 > 0 && index1 <= sizeof(dms_reslution)/sizeof(dms_reslution[0])){
+        s_type[V] = index1;
     }
-    if(para.image_Resolution > 0 && para.image_Resolution <= sizeof(image_reslution)/sizeof(image_reslution[0])){
-        s_type[I] = para.image_Resolution;
+    if(index2 > 0 && index2 <= sizeof(image_reslution)/sizeof(image_reslution[0])){
+        s_type[I] = index2;
     }
 
 #if 0
-    printf("video_reslution = %d\n", para.video_Resolution);
-    printf("v size = %ld, type = %d\n", sizeof(video_reslution)/sizeof(video_reslution[0]), s_type[V]);
+    printf("dms_reslution = %d\n", index1);
+    printf("v size = %ld, type = %d\n", sizeof(dms_reslution)/sizeof(dms_reslution[0]), s_type[V]);
     printf("I size = %ld, type = %d\n", sizeof(image_reslution)/sizeof(image_reslution[0]), s_type[I]);
 #endif
 }
