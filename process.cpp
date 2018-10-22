@@ -185,6 +185,18 @@ void clear_queue()
     printf("clear queue!\n");
 }
 
+uint8_t time2BCD(uint8_t ch)
+{
+    uint8_t m=0, n=0, val=0;
+
+    ch %= 100;
+    m = (ch/10);
+    n = ch%10;
+    val = (m << 4) + n;
+    
+    return val;
+}
+
 void get_local_time(uint8_t get_time[6])
 {
     struct tm a;
@@ -195,14 +207,17 @@ void get_local_time(uint8_t get_time[6])
     //rawtime += 8*3600;
 
     p = localtime(&rawtime);
-    get_time[0] = (p->tm_year+1900)%100;
-    get_time[1] = p->tm_mon+1;
-    get_time[2] = p->tm_mday;
-    get_time[3] = p->tm_hour;
-    get_time[4] = p->tm_min;
-    get_time[5] = p->tm_sec;
+    get_time[0] = time2BCD((p->tm_year+1900)%100);
+    get_time[1] = time2BCD(p->tm_mon+1);
+    get_time[2] = time2BCD(p->tm_mday);
+    get_time[3] = time2BCD(p->tm_hour);
+    get_time[4] = time2BCD(p->tm_min);
+    get_time[5] = time2BCD(p->tm_sec);
 
     printf("local time %d-%d-%d %d:%d:%d\n", (1900 + p->tm_year), ( 1 + p->tm_mon), p->tm_mday,(p->tm_hour), p->tm_min, p->tm_sec); 
+    printf("BCD time:\n");
+    //printf("ptr len: %ld\n", sizeof(p));
+    printbuf(get_time, 6);
 }
 
 sem_t send_data;
@@ -1690,7 +1705,7 @@ int do_snap_shot()
 
     return 0;
 }
-
+#if 0
 void set_BCD_time(AdasWarnFrame *uploadmsg, uint64_t usec)
 {
     struct tm *p = NULL; 
@@ -1707,9 +1722,19 @@ void set_BCD_time(AdasWarnFrame *uploadmsg, uint64_t usec)
     uploadmsg->time[4] = p->tm_min;
     uploadmsg->time[5] = p->tm_sec;
 
-    printf("%d-%d-%d %d:%d:%d\n", (1900 + p->tm_year), ( 1 + p->tm_mon), p->tm_mday,(p->tm_hour), p->tm_min, p->tm_sec); 
-}
 
+    uploadmsg->time[0] = time2BCD((p->tm_year+1900)%100);
+    uploadmsg->time[1] = time2BCD(p->tm_mon+1);
+    uploadmsg->time[2] = time2BCD(p->tm_mday);
+    uploadmsg->time[3] = time2BCD(p->tm_hour);
+    uploadmsg->time[4] = time2BCD(p->tm_min);
+    uploadmsg->time[5] = time2BCD(p->tm_sec);
+
+    printf("%d-%d-%d %d:%d:%d\n", (1900 + p->tm_year), ( 1 + p->tm_mon), p->tm_mday,(p->tm_hour), p->tm_min, p->tm_sec); 
+    printf("BCD time:\n");
+    printbuf(uploadmsg->time, sizeof(uploadmsg->time));
+}
+#endif
 void print_arry(char *sbuf, uint8_t *buf, int len)
 {
     int i = 0;
