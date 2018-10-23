@@ -1,6 +1,9 @@
 #!/bin/bash
 
 
+#### 生成 setup升级包， 苏标平台升级包
+
+
 #平台要求命名规则：
 #  终端通过JT/T 808中的终端控制指令对终端进行升级，升级文件命名规则如下：
 
@@ -52,7 +55,7 @@ function git_reversion()
 mkdir -p $install
 git_folder=`git_reversion`
 src_dir="output/$git_folder/strip_target/"
-dst_dir=$git_folder
+dst_dir=$pack_name
 
 # cp release here
 cd $install;rm -r $dst_dir;cd ..
