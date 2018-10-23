@@ -940,6 +940,11 @@ void set_local_config_default(LocalConfig *config)
 
 #define CLIENT_IP "192.168.100.211"
 #define NETDEV_NAME "eth0"
+
+
+    uint32_t dmsCodeRate[6]={250, 500, 800, 1024, 1024, 2048}; /* kB */
+    uint32_t adasCodeRate[7]={250, 500, 800, 1024, 800, 1024, 2048}; /* kB */
+
     config->serverport = SERVER_PORT;
     snprintf(&config->serverip[0], sizeof(config->serverip), "%s", SERVER_IP);
     snprintf(&config->clientip[0], sizeof(config->clientip), "%s", CLIENT_IP);
@@ -953,7 +958,10 @@ void set_local_config_default(LocalConfig *config)
     config->alert_time_filter=10;
     config->use_heart = 1;
     config->check_heart_period = 90;
-    
+
+    memcpy(config->adasBitRate, adasCodeRate, sizeof(adasCodeRate));
+    memcpy(config->dmsBitRate, dmsCodeRate, sizeof(dmsCodeRate));
+
 #define TTY_NAME "/dev/ttySC0"
     snprintf(&config->tty_name[0], sizeof(config->tty_name), "%s", TTY_NAME);
     config->baudrate = 115200;
@@ -964,6 +972,7 @@ void set_local_config_default(LocalConfig *config)
 
 void local_config_dump(LocalConfig *config)
 {
+    uint32_t i;
     printf("***********Local config dump****************\n");
     printf("usingParaFile: %d\n", config->usingParaFile);
 
@@ -985,11 +994,17 @@ void local_config_dump(LocalConfig *config)
     printf("record_speed : %d\n", config->record_speed);
     printf("record_period : %d\n", config->record_period);
 
-
     printf("use_heart : %d\n", config->use_heart);
     printf("check_heart_period : %d\n", config->check_heart_period);
-
-
+    
+    printf("adas bitRate:\n");
+    for(i=0; i<sizeof(config->adasBitRate)/sizeof(uint32_t); i++){
+        printf("adasBitRate %d\n", config->adasBitRate[i]);
+    }
+    printf("dms bitRate:\n");
+    for(i=0; i<sizeof(config->dmsBitRate)/sizeof(uint32_t); i++){
+        printf("dmsBitRate %d\n", config->dmsBitRate[i]);
+    }
     printf("***********Local config dump****************\n");
 }
 
@@ -1050,48 +1065,8 @@ static bool get_tty_config(const rapidjson::Value& val, LocalConfig *config)
     return true;
 }
 
-
-#if 0
 static bool get_alert_para(const rapidjson::Value& val, LocalConfig *config)
 {
-#if 0
-    assert(val["jpeg_fps"].IsNumber());
-    assert(val["jpeg_fps"].IsUint());
-    if (val.HasMember("jpeg_fps")) {
-        config->jpeg_coder_fps = val["jpeg_fps"].GetUint();
-    }
-
-    assert(val["speed_filter"].IsBool());
-    assert(val.HasMember("speed_filter"));
-    if(val["speed_filter"].GetBool()){
-        config->speed_filter_enable = 1;
-    }else{
-        config->speed_filter_enable = 0;
-    }
-#else
-
-    assert(val["jpeg_fps"].IsNumber());
-    assert(val["jpeg_fps"].IsUint());
-    if (val.HasMember("jpeg_fps")) {
-        config->jpeg_coder_fps = val["jpeg_fps"].GetUint();
-    }
-
-    assert(val["speed_filter_enable"].IsBool());
-    assert(val.HasMember("speed_filter_enable"));
-    if(val["speed_filter_enable"].GetBool()){
-        config->speed_filter_enable = 1;
-    }else{
-        config->speed_filter_enable = 0;
-    }
-
-#endif
-
-    return true;
-}
-#else
-static bool get_alert_para(const rapidjson::Value& val, LocalConfig *config)
-{
-
     assert(val["speed_filter_enable"].IsBool());
     if(val["speed_filter_enable"].GetBool()){
         config->speed_filter_enable = 1;
@@ -1137,9 +1112,21 @@ static bool get_alert_para(const rapidjson::Value& val, LocalConfig *config)
         config->check_heart_period= val["check_heart_period"].GetUint();
     }
 
+    assert(val["adasBitRate"].IsArray());
+    /* rapidjson uses SizeType instead of size_t. */
+    for (SizeType i = 0; i < val["adasBitRate"].Size(); i++){
+        printf("val[adasBitRate][%d] = %d\n", i, val["adasBitRate"][i].GetInt());
+        config->adasBitRate[i] = val["adasBitRate"][i].GetInt();
+    }
+
+    assert(val["dmsBitRate"].IsArray());
+    for (SizeType i = 0; i < val["dmsBitRate"].Size(); i++){
+        printf("val[dmsBitRate][%d] = %d\n", i, val["dmsBitRate"][i].GetInt());
+        config->dmsBitRate[i] = val["dmsBitRate"][i].GetInt();
+    }
+
     return true;
 }
-#endif
 
 static int parse_prot_json(char *buffer, LocalConfig *config)
 {

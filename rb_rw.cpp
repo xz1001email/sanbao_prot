@@ -963,16 +963,16 @@ enum VIDEO_INDEX{
     MAX  
 };
 
-int dmsCodeRate[]={250, 500, 800, 1024, 1024, 2048}; /* kB */
-int adasCodeRate[]={250, 500, 800, 1024, 800, 1024, 2048}; /* kB */
-
 //reconfig image
 void config_adas_video_resolution(int fps, int quality)
 {
     static uint32_t s_type[2] = {0, 0};
     uint32_t index1=0, index2=0;
+    uint32_t adasCodeRate[7]={250, 500, 800, 1024, 800, 1024, 2048}; /* kB */
     AdasParaSetting para;
+
     read_dev_para(&para, SAMPLE_DEVICE_ID_ADAS);
+    memcpy(adasCodeRate, g_configini.adasBitRate, sizeof(adasCodeRate));
 
     index1 = para.video_Resolution;
     index2 = para.image_Resolution;
@@ -1025,8 +1025,10 @@ void config_dms_video_resolution(int fps, int quality)
     static uint32_t s_type[2] = {0, 0};
     DmsParaSetting para;
     uint32_t index1=0, index2=0;
-    read_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
+    uint32_t dmsCodeRate[]={250, 500, 800, 1024, 1024, 2048}; /* kB */
 
+    read_dev_para(&para, SAMPLE_DEVICE_ID_DMS);
+    memcpy(dmsCodeRate, g_configini.dmsBitRate, sizeof(dmsCodeRate));
     index1 = para.video_Resolution;
     index2 = para.image_Resolution;
 

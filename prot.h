@@ -626,11 +626,11 @@ typedef struct __LocalConfig {
     char use_heart;
     uint32_t check_heart_period;
 
+    uint32_t adasBitRate[7];
+    uint32_t dmsBitRate[6];
 
 } __attribute__((packed)) LocalConfig;
 /*********************local config file END****************************/
-
-
 
 
 typedef struct __MmInfo_node{

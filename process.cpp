@@ -197,6 +197,18 @@ uint8_t time2BCD(uint8_t ch)
     return val;
 }
 
+void buf2BCD(uint8_t *buf, uint8_t len)
+{
+    uint8_t bcd[256];
+    int i=0;
+    
+    memcpy(bcd, buf, len);
+    for(i=0; i<len; i++){
+        bcd[i] = time2BCD(buf[i]);
+    }
+    memcpy(buf, bcd, len);
+}
+
 void get_local_time(uint8_t get_time[6])
 {
     struct tm a;
@@ -207,17 +219,14 @@ void get_local_time(uint8_t get_time[6])
     //rawtime += 8*3600;
 
     p = localtime(&rawtime);
-    get_time[0] = time2BCD((p->tm_year+1900)%100);
-    get_time[1] = time2BCD(p->tm_mon+1);
-    get_time[2] = time2BCD(p->tm_mday);
-    get_time[3] = time2BCD(p->tm_hour);
-    get_time[4] = time2BCD(p->tm_min);
-    get_time[5] = time2BCD(p->tm_sec);
+    get_time[0] = (p->tm_year+1900)%100;
+    get_time[1] = p->tm_mon+1;
+    get_time[2] = p->tm_mday;
+    get_time[3] = p->tm_hour;
+    get_time[4] = p->tm_min;
+    get_time[5] = p->tm_sec;
 
     printf("local time %d-%d-%d %d:%d:%d\n", (1900 + p->tm_year), ( 1 + p->tm_mon), p->tm_mday,(p->tm_hour), p->tm_min, p->tm_sec); 
-    printf("BCD time:\n");
-    //printf("ptr len: %ld\n", sizeof(p));
-    printbuf(get_time, 6);
 }
 
 sem_t send_data;
@@ -1068,9 +1077,10 @@ void clear_old_media_file(InfoForStore *mm)
 void record_alert_log(uint8_t time[6], int type, uint8_t flag)
 {
     char status[3][20] = {"trigger", "begin", "end"};
-
     char logbuf[256];
+
     //write log
+#if defined ENABLE_ADAS
     snprintf(logbuf, sizeof(logbuf), "[%02d%02d%02d %02d:%02d:%02d] warn_type:%s, status:%s",\
             time[0],\
             time[1],\
@@ -1080,6 +1090,17 @@ void record_alert_log(uint8_t time[6], int type, uint8_t flag)
             time[5],\
             adas_alert_type_to_str(type),
             status[flag]); 
+#elif defined ENABLE_DMS
+    snprintf(logbuf, sizeof(logbuf), "[%02d%02d%02d %02d:%02d:%02d] warn_type:%s, status:%s",\
+            time[0],\
+            time[1],\
+            time[2],\
+            time[3],\
+            time[4],\
+            time[5],\
+            dms_alert_type_to_str(type),
+            status[flag]); 
+#endif
     data_log(logbuf);
 }
 
@@ -1104,6 +1125,9 @@ int build_adas_warn_frame(int type, uint8_t status_flag, AdasWarnFrame *uploadms
 
     get_local_time(uploadmsg->time);
     record_alert_log(uploadmsg->time, type, status_flag);
+    buf2BCD(uploadmsg->time, sizeof(uploadmsg->time));
+    //printf("BCD:\n");
+    //printbuf(uploadmsg->time, 6);
 
     uploadmsg->status_flag = status_flag;
     uploadmsg->warning_id = MY_HTONL(get_next_id(WARNING_ID_MODE, NULL, 0));
@@ -1225,6 +1249,7 @@ int build_dms_warn_frame(int type, uint8_t status_flag, DsmWarnFrame *uploadmsg)
 
     get_local_time(uploadmsg->time);
     record_alert_log(uploadmsg->time, type, status_flag);
+    buf2BCD(uploadmsg->time, sizeof(uploadmsg->time));
 
     RealTimeDdata_process(&tmp, READ_REAL_TIME_MSG);
     uploadmsg->altitude = tmp.altitude;
@@ -1405,7 +1430,7 @@ void deal_wsi_dms_info(WsiFrame *can)
         }
         if(filter_alert_by_time(&dms_fatigue_warn, fatigue_filter_time)){
             playloadlen = build_dms_warn_frame(alert_type, status_flag, uploadmsg);
-            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS,SAMPLE_CMD_WARNING_REPORT,(uint8_t *)uploadmsg, playloadlen);
+            message_queue_send(pSend, SAMPLE_DEVICE_ID_DMS, SAMPLE_CMD_WARNING_REPORT, (uint8_t *)uploadmsg, playloadlen);
         }
     }
     if ((cur->alert_look_around && !last->alert_look_around) ||\
@@ -1705,36 +1730,6 @@ int do_snap_shot()
 
     return 0;
 }
-#if 0
-void set_BCD_time(AdasWarnFrame *uploadmsg, uint64_t usec)
-{
-    struct tm *p = NULL; 
-    time_t timep = 0;   
-    printf("time:%ld\n", usec);
-    //timep = strtoul(second, NULL, 10);
-    //timep = timep/1000000;
-    timep = usec/1000000;
-    p = localtime(&timep);
-    uploadmsg->time[0] = (p->tm_year+1900)%100;
-    uploadmsg->time[1] = p->tm_mon+1;
-    uploadmsg->time[2] = p->tm_mday;
-    uploadmsg->time[3] = p->tm_hour;
-    uploadmsg->time[4] = p->tm_min;
-    uploadmsg->time[5] = p->tm_sec;
-
-
-    uploadmsg->time[0] = time2BCD((p->tm_year+1900)%100);
-    uploadmsg->time[1] = time2BCD(p->tm_mon+1);
-    uploadmsg->time[2] = time2BCD(p->tm_mday);
-    uploadmsg->time[3] = time2BCD(p->tm_hour);
-    uploadmsg->time[4] = time2BCD(p->tm_min);
-    uploadmsg->time[5] = time2BCD(p->tm_sec);
-
-    printf("%d-%d-%d %d:%d:%d\n", (1900 + p->tm_year), ( 1 + p->tm_mon), p->tm_mday,(p->tm_hour), p->tm_min, p->tm_sec); 
-    printf("BCD time:\n");
-    printbuf(uploadmsg->time, sizeof(uploadmsg->time));
-}
-#endif
 void print_arry(char *sbuf, uint8_t *buf, int len)
 {
     int i = 0;
