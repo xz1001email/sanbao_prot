@@ -689,7 +689,7 @@ static int32_t message_queue_send(SBProtHeader *pHeader, uint8_t devid, uint8_t 
     //    printf("sendpackage cmd = 0x%x,msg.need_ack = %d, len=%d, push!\n",msg.cmd, msg.need_ack, msg.len);
     ptr_queue_push(g_send_q_p, &msg, &ptr_queue_lock);
 
-    printf("push cmd = 0x%x, index = %d\n", msg.pkg.cmd, msg.pkg.index);
+    //printf("push cmd = 0x%x, index = %d\n", msg.pkg.cmd, msg.pkg.index);
     sem_post(&send_data);
     //printf("push queue, len = %d\n", msg.len);
 
@@ -774,6 +774,9 @@ void get_adas_Info_for_store(uint8_t type, InfoForStore *mm_store)
                 mm_store->photo_enable = 1; 
             else
                 mm_store->photo_enable = 0; 
+
+            break;
+
         case SB_WARN_TYPE_TSRW:
         case SB_WARN_TYPE_TSR:
             break;
@@ -829,18 +832,24 @@ void get_dms_Info_for_store(uint8_t type, InfoForStore *mm_store)
                 mm_store->video_enable = 1; 
             else
                 mm_store->video_enable = 0; 
+    
+            //printf("read photo_num = %d\n", mm_store->photo_num);
+            //printf("read video time = %d\n", mm_store->video_time);
+            //printf("read photo_time_period = %d\n", mm_store->photo_time_period);
 
             if((mm_store->photo_num != 0 && mm_store->photo_num < WARN_SNAP_NUM_MAX))
                 mm_store->photo_enable = 1; 
             else
                 mm_store->photo_enable = 0; 
 
+            break;
 
         case DMS_DRIVER_CHANGE:
         case DMS_SANPSHOT_EVENT:
             mm_store->photo_num = para.photo_num;
             mm_store->photo_time_period = para.photo_time_period;
             mm_store->photo_enable = 1; 
+            break;
 
         default:
             break;
@@ -1613,7 +1622,7 @@ static int send_package(prot_handle *handle)
         goto out;
     }
 
-    WSI_DEBUG("[send] pop: cmd = 0x%x, index = %d, header len = %d\n", header.pkg.cmd,header.pkg.index, header.len);
+    //WSI_DEBUG("[send] pop: cmd = 0x%x, index = %d, header len = %d\n", header.pkg.cmd,header.pkg.index, header.len);
     //printbuf(header.buf, header.len);
 
     handle->sndlen = header.len;
@@ -1641,7 +1650,7 @@ static int send_package(prot_handle *handle)
             }
             if (rc == 0){
                 recv_ack= WAIT_MSG;//clear
-                printf("cond_wait get ack..\n");
+                //printf("cond_wait get ack..\n");
             }else if(rc == ETIMEDOUT){//timeout
                 printf("recv ack timeout! cnt = %d\n", header.pkg.send_repeat);
             }else{
@@ -1678,7 +1687,7 @@ void *pthread_process_send(void *para)
     }
 
     while (!force_exit) {
-        printf("sem waiting...\n");
+        //printf("sem waiting...\n");
         sem_wait(&send_data);
         //send_pkg_to_host(fd, writebuf);
         send_package(&g_handle);
@@ -2012,7 +2021,7 @@ static int32_t send_mm_req_ack(SBProtHeader *pHeader, int len)
     if(pHeader->cmd == SAMPLE_CMD_REQ_MM_DATA && !g_pkg_status_p->mm_data_trans_waiting) //recv req
     {
         printf("------------req mm-------------\n");
-        printbuf((uint8_t *)pHeader, len);
+        //printbuf((uint8_t *)pHeader, len);
         //检查接收幀的完整性
         if(len != sizeof(SBMmHeader) + sizeof(SBProtHeader) + 1){
             printf("recv cmd:0x%x, data len maybe error[%d]/[%ld]!\n", \
@@ -2024,11 +2033,10 @@ static int32_t send_mm_req_ack(SBProtHeader *pHeader, int len)
 
         mm_id = MY_NTOHL(mm_ptr->id);
         mm_type = mm_ptr->type;
-        printf("req mm_type = %d\n", mm_type);
-        printf("req mm_id = %10u\n", mm_id);
+        printf("req mm_type = %d, id = %010u\n", mm_type, mm_id);
 
         filesize = find_local_image_name(mm_type, mm_id,  g_pkg_status_p->filepath);
-        snprintf(logbuf, sizeof(logbuf), "try find file:%s",g_pkg_status_p->filepath);
+        snprintf(logbuf, sizeof(logbuf), "try find file:%s [%ld]",g_pkg_status_p->filepath, time(NULL));
         data_log(logbuf);
 
         if(filesize > 0){//media found
@@ -2045,6 +2053,8 @@ static int32_t send_mm_req_ack(SBProtHeader *pHeader, int len)
 
             //send first package
             printf("send first package!\n");
+            snprintf(logbuf, sizeof(logbuf), "transmit %s start",g_pkg_status_p->filepath);
+            data_log(logbuf);
             sample_send_image(pHeader->device_id);
         }else{
             printf("find file fail!\n");
