@@ -36,6 +36,8 @@
 using namespace std;
 
 
+static uint32_t s_mm_id = 0;
+
 int GetFileSize(const char *filename);
 const char *dms_alert_type_to_str(uint8_t type);
 const char *adas_alert_type_to_str(uint8_t type);
@@ -52,6 +54,98 @@ prot_handle g_handle;
 #define GET_RECV_NUM             3
 
 static uint32_t unescaple_msg(uint8_t *buf, uint8_t *msg, int msglen);
+
+
+#include <unistd.h>
+#include <dirent.h>
+#include <sys/stat.h>
+uint64_t getmmFileSize(const char *dir, int depth)
+{
+    DIR *dp;
+    struct dirent *entry;
+    struct stat statbuf;
+    int maxid = 0;
+    int tmpid = 0;
+    struct stat fstat;
+    uint64_t sum=0;
+
+    char pathname[100];
+    const char *p;
+
+    if ((dp = opendir(dir)) == NULL) {
+        fprintf(stderr, "Can`t open directory %s\n", dir);
+        return -1;
+    }
+
+    chdir(dir);
+    while ((entry = readdir(dp)) != NULL) {
+        lstat(entry->d_name, &statbuf);
+        if (S_ISDIR(statbuf.st_mode)) {
+#if 0
+            if (strcmp(entry->d_name, ".") == 0 || 
+                    strcmp(entry->d_name, "..") == 0 )  
+                continue;
+            printf("    %*s%s/\n", depth, "", entry->d_name);
+            printdir(entry->d_name, depth+4);
+#endif
+        } else{
+            printf("%s: st_size = %ld\n", entry->d_name, statbuf.st_size);
+            sum += statbuf.st_size;
+            stat((const char *)&pathname[0], &fstat);
+        }
+    }
+    chdir("..");
+    closedir(dp);
+
+    printf("files size sum = %ld, %.1lf\n", sum, sum/(1024*1024*1.0));
+
+    return sum;
+}
+
+uint32_t getFileId(char *filename)
+{
+    //printf("filename = %s\n", filename);
+    return strtol(filename, NULL, 10);
+}
+
+uint32_t getmmFileNumMax(const char *dir, int depth)
+{
+    DIR *dp;
+    struct dirent *entry;
+    struct stat statbuf;
+    uint32_t maxid = 0;
+    uint64_t tmpid = 0;
+    struct stat fstat;
+
+    if ((dp = opendir(dir)) == NULL) {
+        fprintf(stderr, "Can`t open directory %s\n", dir);
+        return -1;
+    }
+
+    chdir(dir);
+    while ((entry = readdir(dp)) != NULL) {
+        lstat(entry->d_name, &statbuf);
+        if (S_ISDIR(statbuf.st_mode)) {
+#if 0
+            if (strcmp(entry->d_name, ".") == 0 || 
+                    strcmp(entry->d_name, "..") == 0 )  
+                continue;
+            printf("    %*s%s/\n", depth, "", entry->d_name);
+            printdir(entry->d_name, depth+4);
+#endif
+        } else{
+            tmpid = getFileId(entry->d_name);
+
+            //printf("tmp id = %010u, 0x%08x\n", tmpid, tmpid);
+            maxid = maxid > tmpid ? maxid : tmpid;
+        }
+    }
+    chdir("..");
+    closedir(dp);
+    printf("max id = %010u, 0x%08x\n", maxid, maxid);
+
+    return maxid;
+}
 
 const char *dms_alert_type_to_str(uint8_t type)
 {
@@ -335,6 +429,24 @@ int record_run_time()
     #define PROT_LOG_NAME "/data/dmsprot.log"
 #endif
 
+void rm_mmFiles()
+{
+    uint64_t Bsize = 0;
+    char cmd[100];
+    sprintf(cmd, "busybox rm %s", SNAP_SHOT_PATH_FILES);
+    system(cmd);
+}
+
+void check_mmSize()
+{
+    uint64_t Bsize = 0;
+#define MM_SIZE_LIMIT_3G (0xC0000000UL)
+#define MM_SIZE_LIMIT_2G (0x80000000UL)
+    Bsize = getmmFileSize(SNAP_SHOT_JPEG_PATH, 0);
+    if(Bsize > MM_SIZE_LIMIT_2G){
+        rm_mmFiles();
+    }
+}
 
 int prot_init_pre(prot_handle *phandle);
 extern LocalConfig g_configini;
@@ -375,6 +487,16 @@ int global_var_init()
     }else{
         data_log_init(PROT_LOG_NAME, false);
     }
+
+    //check_mmSize();
+
+    s_mm_id = getmmFileNumMax(SNAP_SHOT_JPEG_PATH, 0);
+
+    if(s_mm_id == 0xFFFFFFFF){
+        s_mm_id = 0;
+        rm_mmFiles();
+    }
+    s_mm_id += 1;
 
     record_run_time();
 
@@ -509,7 +631,7 @@ uint32_t get_next_id(int mode, uint32_t *id, uint32_t num)
 {
     static pthread_mutex_t id_lock = PTHREAD_MUTEX_INITIALIZER;
     static uint32_t s_warning_id = 0;
-    static uint32_t s_mm_id = 0;
+    //static uint32_t s_mm_id = 0;
     uint32_t warn_id = 0;
     uint32_t i;
 

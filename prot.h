@@ -33,11 +33,11 @@
 
 #if defined ENABLE_ADAS
 #define SNAP_SHOT_JPEG_PATH "/data/snap/adas/"
-//#define SNAP_SHOT_JPEG_PATH "/mnt/obb/adas/"
+#define SNAP_SHOT_PATH_FILES "/data/snap/adas/*"
 
 #elif defined ENABLE_DMS
 #define SNAP_SHOT_JPEG_PATH "/data/snap/dms/"
-//#define SNAP_SHOT_JPEG_PATH "/mnt/obb/dms/"
+#define SNAP_SHOT_PATH_FILES "/data/snap/dms/*"
 #endif
 
 #define LOCAL_ADAS_PRAR_FILE     "/data/adas_para"
