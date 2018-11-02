@@ -482,7 +482,7 @@ int global_var_init()
     create_upgrade_dir();
 
     size = GetFileSize(PROT_LOG_NAME);
-    if(size>100*1024*1024){
+    if(size > LOG_SIZE_1G){
         data_log_init(PROT_LOG_NAME, true);
     }else{
         data_log_init(PROT_LOG_NAME, false);
@@ -496,7 +496,7 @@ int global_var_init()
         s_mm_id = 0;
         rm_mmFiles();
     }
-    s_mm_id += 1;
+    //s_mm_id += 1;
 
     record_run_time();
 
