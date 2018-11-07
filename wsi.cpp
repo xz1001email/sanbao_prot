@@ -1209,8 +1209,8 @@ int main(int argc, char **argv)
             default:
             case 'h':
                 usage(argv[0]);
+                printf("version: %s\n", SOFTWARE_VERSION);
                 exit(0);
-                break;
             case 'V':
                 if (!optarg) {
                     printf("using default verbose = %d\n", atoi(optarg));
@@ -1230,8 +1230,9 @@ int main(int argc, char **argv)
                 }
                 break;
             case 'v':
-                printf(SOFTWARE_VERSION"\n");
-                break;
+                //printf(SOFTWARE_VERSION"\n");
+                printf("version: %s\n", SOFTWARE_VERSION);
+                exit(0);
         }
     }
 
